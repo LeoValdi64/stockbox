@@ -60,6 +60,7 @@ export async function createProduct(data: {
   category?: string;
   costPrice?: number;
   salePrice?: number;
+  imageUrl?: string;
 }) {
   const userId = await getUserId();
 
@@ -74,6 +75,7 @@ export async function createProduct(data: {
       category: data.category || null,
       costPrice: data.costPrice ?? null,
       salePrice: data.salePrice ?? null,
+      imageUrl: data.imageUrl || null,
     },
   });
 
@@ -93,6 +95,7 @@ export async function updateProduct(
     category?: string;
     costPrice?: number;
     salePrice?: number;
+    imageUrl?: string;
   }
 ) {
   const userId = await getUserId();
@@ -119,6 +122,9 @@ export async function updateProduct(
         : {}),
       ...(data.salePrice !== undefined
         ? { salePrice: data.salePrice ?? null }
+        : {}),
+      ...(data.imageUrl !== undefined
+        ? { imageUrl: data.imageUrl || null }
         : {}),
     },
   });

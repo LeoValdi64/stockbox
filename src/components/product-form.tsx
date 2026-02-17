@@ -9,7 +9,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { createProduct, updateProduct } from "@/lib/actions/inventory";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Loader2, ScanBarcode } from "lucide-react";
+import { ImageUpload } from "@/components/image-upload";
+import { BarcodeScanner } from "@/components/barcode-scanner";
+import { BarcodeDisplay } from "@/components/barcode-display";
+import { QRCodeSVG } from "qrcode.react";
 
 interface ProductFormProps {
   product?: {
@@ -22,6 +26,7 @@ interface ProductFormProps {
     category: string | null;
     costPrice: number | null;
     salePrice: number | null;
+    imageUrl: string | null;
   };
   initialBarcode?: string;
 }
@@ -29,6 +34,11 @@ interface ProductFormProps {
 export function ProductForm({ product, initialBarcode }: ProductFormProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [showScanner, setShowScanner] = useState(false);
+  const [barcodeType, setBarcodeType] = useState<"barcode" | "qr">("barcode");
+  const [imageUrl, setImageUrl] = useState<string | null>(
+    product?.imageUrl ?? null
+  );
 
   const [form, setForm] = useState({
     name: product?.name ?? "",
@@ -59,6 +69,7 @@ export function ProductForm({ product, initialBarcode }: ProductFormProps) {
           category: form.category || undefined,
           costPrice: form.costPrice ? Number(form.costPrice) : undefined,
           salePrice: form.salePrice ? Number(form.salePrice) : undefined,
+          imageUrl: imageUrl || undefined,
         };
 
         if (product) {
@@ -78,6 +89,14 @@ export function ProductForm({ product, initialBarcode }: ProductFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {/* Image Upload */}
+      <Card className="border-zinc-800 bg-zinc-900">
+        <CardContent className="space-y-2 pt-6">
+          <Label>Product Image</Label>
+          <ImageUpload value={imageUrl} onChange={setImageUrl} />
+        </CardContent>
+      </Card>
+
       <Card className="border-zinc-800 bg-zinc-900">
         <CardContent className="space-y-4 pt-6">
           <div className="space-y-2">
@@ -106,14 +125,91 @@ export function ProductForm({ product, initialBarcode }: ProductFormProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="barcode">Barcode</Label>
-            <Input
-              id="barcode"
-              placeholder="Scan or enter barcode"
-              className="border-zinc-700 bg-zinc-800"
-              value={form.barcode}
-              onChange={(e) => setForm({ ...form, barcode: e.target.value })}
-            />
+            <Label htmlFor="barcode">Barcode / QR Code</Label>
+            <div className="flex gap-2">
+              <Input
+                id="barcode"
+                placeholder="Scan or enter barcode"
+                className="border-zinc-700 bg-zinc-800"
+                value={form.barcode}
+                onChange={(e) => setForm({ ...form, barcode: e.target.value })}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="shrink-0"
+                onClick={() => setShowScanner(!showScanner)}
+                title="Scan barcode"
+              >
+                <ScanBarcode className="h-4 w-4" />
+              </Button>
+            </div>
+            {showScanner && (
+              <div className="mt-2">
+                <BarcodeScanner
+                  onScan={(barcode) => {
+                    setForm({ ...form, barcode });
+                    setShowScanner(false);
+                    toast.success(`Barcode scanned: ${barcode}`);
+                  }}
+                  onClose={() => setShowScanner(false)}
+                />
+              </div>
+            )}
+            {!form.barcode && !showScanner && (
+              <div className="mt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  onClick={() => {
+                    const generated = `SB-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+                    setForm({ ...form, barcode: generated });
+                    toast.success("Barcode generated");
+                  }}
+                >
+                  Generate New Barcode
+                </Button>
+              </div>
+            )}
+            {form.barcode && (
+              <div className="mt-2 space-y-2">
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant={barcodeType === "barcode" ? "default" : "outline"}
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => setBarcodeType("barcode")}
+                  >
+                    Barcode
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={barcodeType === "qr" ? "default" : "outline"}
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => setBarcodeType("qr")}
+                  >
+                    QR Code
+                  </Button>
+                </div>
+                {barcodeType === "barcode" ? (
+                  <BarcodeDisplay value={form.barcode} />
+                ) : (
+                  <div className="flex justify-center rounded-lg bg-zinc-800 p-4">
+                    <QRCodeSVG
+                      value={form.barcode}
+                      size={150}
+                      bgColor="transparent"
+                      fgColor="#d4d4d8"
+                    />
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">

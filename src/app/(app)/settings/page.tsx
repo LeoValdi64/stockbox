@@ -1,9 +1,10 @@
 import { UserButton } from "@clerk/nextjs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Settings, Tag, User } from "lucide-react";
+import { Settings, Tag, User, LogOut } from "lucide-react";
 import { getCategories } from "@/lib/actions/categories";
 import { CategoriesManager } from "@/components/categories-manager";
+import { SignOutButton } from "@/components/sign-out-button";
 
 export default async function SettingsPage() {
   let categories: Awaited<ReturnType<typeof getCategories>> = [];
@@ -40,6 +41,22 @@ export default async function SettingsPage() {
               </p>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Sign Out */}
+      <Card className="border-zinc-800 bg-zinc-900">
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <LogOut className="h-4 w-4" />
+            Sign Out
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="mb-3 text-sm text-zinc-400">
+            Sign out of your StockBox account.
+          </p>
+          <SignOutButton />
         </CardContent>
       </Card>
 

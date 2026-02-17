@@ -1,13 +1,14 @@
 import { auth } from "@clerk/nextjs/server";
-import { redirect } from "next/navigation";
 import { LandingContent } from "@/components/landing-content";
 
 export default async function LandingPage() {
-  const { userId } = await auth();
-
-  if (userId) {
-    redirect("/dashboard");
+  let isSignedIn = false;
+  try {
+    const { userId } = await auth();
+    isSignedIn = !!userId;
+  } catch {
+    isSignedIn = false;
   }
 
-  return <LandingContent />;
+  return <LandingContent isSignedIn={isSignedIn} />;
 }

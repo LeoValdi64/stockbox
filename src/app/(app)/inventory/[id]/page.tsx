@@ -1,12 +1,12 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Edit } from "lucide-react";
+import { ArrowLeft, Edit, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { getProduct } from "@/lib/actions/inventory";
 import { DeleteProductButton } from "@/components/delete-product-button";
-import { BarcodeDisplay } from "@/components/barcode-display";
+import { BarcodePrintView } from "@/components/barcode-print-view";
 
 export default async function ProductDetailPage({
   params,
@@ -49,6 +49,21 @@ export default async function ProductDetailPage({
           <DeleteProductButton id={product.id} />
         </div>
       </div>
+
+      {/* Product Image */}
+      {product.imageUrl ? (
+        <div className="overflow-hidden rounded-xl">
+          <img
+            src={product.imageUrl}
+            alt={product.name}
+            className="h-56 w-full object-cover"
+          />
+        </div>
+      ) : (
+        <div className="flex h-40 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900">
+          <Package className="h-12 w-12 text-zinc-700" />
+        </div>
+      )}
 
       <Card className="border-zinc-800 bg-zinc-900">
         <CardContent className="space-y-4 pt-6">
@@ -108,10 +123,10 @@ export default async function ProductDetailPage({
           </div>
 
           {product.barcode && (
-            <div>
-              <span className="text-sm text-zinc-400">Barcode</span>
-              <BarcodeDisplay value={product.barcode} />
-            </div>
+            <BarcodePrintView
+              barcode={product.barcode}
+              productName={product.name}
+            />
           )}
         </CardContent>
       </Card>

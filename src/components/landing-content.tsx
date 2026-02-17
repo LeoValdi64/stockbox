@@ -62,7 +62,7 @@ const features = [
   },
 ];
 
-export function LandingContent() {
+export function LandingContent({ isSignedIn = false }: { isSignedIn?: boolean }) {
   return (
     <div className="min-h-screen bg-zinc-950">
       {/* Nav */}
@@ -77,12 +77,20 @@ export function LandingContent() {
             </span>
           </Link>
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" asChild>
-              <Link href="/sign-in">Sign in</Link>
-            </Button>
-            <Button size="sm" asChild>
-              <Link href="/sign-up">Get Started</Link>
-            </Button>
+            {isSignedIn ? (
+              <Button size="sm" asChild>
+                <Link href="/dashboard">Go to Dashboard</Link>
+              </Button>
+            ) : (
+              <>
+                <Button variant="ghost" size="sm" asChild>
+                  <Link href="/sign-in">Sign in</Link>
+                </Button>
+                <Button size="sm" asChild>
+                  <Link href="/sign-up">Get Started</Link>
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </nav>
