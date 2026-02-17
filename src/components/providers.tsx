@@ -14,6 +14,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <ClerkProvider
+      afterSignInUrl="/dashboard"
+      afterSignUpUrl="/dashboard"
       appearance={{
         baseTheme: dark,
         variables: {
