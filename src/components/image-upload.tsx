@@ -83,6 +83,7 @@ export function ImageUpload({ value, onChange }: ImageUploadProps) {
         const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
         const path = `${fileName}`;
 
+        if (!supabase) { toast.error("Storage not configured"); return; }
         const { error } = await supabase.storage
           .from("product-images")
           .upload(path, compressed, {
@@ -92,7 +93,7 @@ export function ImageUpload({ value, onChange }: ImageUploadProps) {
 
         if (error) throw error;
 
-        const { data: urlData } = supabase.storage
+        const { data: urlData } = supabase!.storage
           .from("product-images")
           .getPublicUrl(path);
 
@@ -128,7 +129,7 @@ export function ImageUpload({ value, onChange }: ImageUploadProps) {
         const url = new URL(value);
         const parts = url.pathname.split("/product-images/");
         if (parts[1]) {
-          await supabase.storage.from("product-images").remove([parts[1]]);
+          await supabase?.storage.from("product-images").remove([parts[1]]);
         }
       } catch {
         // Ignore cleanup errors
