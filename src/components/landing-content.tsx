@@ -96,7 +96,7 @@ export function LandingContent({ isSignedIn = false }: { isSignedIn?: boolean })
       </nav>
 
       {/* Hero */}
-      <section className="relative flex min-h-screen items-center justify-center overflow-hidden px-6 pt-16">
+      <section className="relative flex min-h-screen items-center justify-center overflow-hidden px-6 pt-32">
         <div className="pointer-events-none absolute inset-0">
           <div className="absolute left-1/2 top-0 h-[600px] w-[800px] -translate-x-1/2 rounded-full bg-zinc-800/20 blur-3xl" />
           <div className="absolute bottom-0 left-1/2 h-[400px] w-[600px] -translate-x-1/2 rounded-full bg-zinc-700/10 blur-3xl" />
