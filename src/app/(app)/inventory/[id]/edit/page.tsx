@@ -11,7 +11,7 @@ export default async function EditProductPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  let product;
+  let product: Awaited<ReturnType<typeof getProduct>> | null = null;
 
   try {
     product = await getProduct(id);

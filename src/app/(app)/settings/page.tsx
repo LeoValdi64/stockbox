@@ -6,7 +6,7 @@ import { getCategories } from "@/lib/actions/categories";
 import { CategoriesManager } from "@/components/categories-manager";
 
 export default async function SettingsPage() {
-  let categories;
+  let categories: Awaited<ReturnType<typeof getCategories>> = [];
   try {
     categories = await getCategories();
   } catch {

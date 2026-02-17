@@ -11,7 +11,7 @@ import { getDashboardStats } from "@/lib/actions/inventory";
 import Link from "next/link";
 
 export default async function DashboardPage() {
-  let stats;
+  let stats: Awaited<ReturnType<typeof getDashboardStats>> | null = null;
   try {
     stats = await getDashboardStats();
   } catch {

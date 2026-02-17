@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Plus, ShoppingCart, Trash2 } from "lucide-react";
+import { Plus, ShoppingCart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -7,7 +7,7 @@ import { getSales } from "@/lib/actions/sales";
 import { DeleteSaleButton } from "@/components/delete-sale-button";
 
 export default async function SalesPage() {
-  let sales;
+  let sales: Awaited<ReturnType<typeof getSales>> = [];
   try {
     sales = await getSales();
   } catch {

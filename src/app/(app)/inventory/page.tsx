@@ -1,8 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { Plus, Search } from "lucide-react";
+import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { getProducts } from "@/lib/actions/inventory";
 import { ProductCard } from "@/components/product-card";
 import { InventorySearch } from "@/components/inventory-search";
@@ -56,7 +55,7 @@ async function ProductList({
   search?: string;
   category?: string;
 }) {
-  let products;
+  let products: Awaited<ReturnType<typeof getProducts>> = [];
   try {
     products = await getProducts(search, category);
   } catch {
