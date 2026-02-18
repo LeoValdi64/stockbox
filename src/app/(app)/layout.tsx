@@ -17,7 +17,7 @@ export default async function AppLayout({
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 pb-28">
+    <div className="min-h-screen bg-zinc-950 pb-36">
       <main className="mx-auto max-w-lg px-4 py-6">{children}</main>
       <FAB />
       <BottomNav />
