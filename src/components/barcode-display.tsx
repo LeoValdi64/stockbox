@@ -16,15 +16,15 @@ export function BarcodeDisplay({ value, printMode = false }: BarcodeDisplayProps
       try {
         JsBarcode(svgRef.current, value, {
           format: "CODE128",
-          width: 2,
-          height: 60,
-          displayValue: true,
+          width: printMode ? 1.5 : 2,
+          height: printMode ? 40 : 60,
+          displayValue: !printMode,
           background: printMode ? "#ffffff" : "transparent",
           lineColor: printMode ? "#000000" : "#d4d4d8",
           fontSize: 14,
           font: "monospace",
-          margin: 10,
-          textMargin: printMode ? 5 : undefined,
+          margin: printMode ? 0 : 10,
+          textMargin: printMode ? 0 : undefined,
         });
       } catch {
         // Invalid barcode format, show text fallback

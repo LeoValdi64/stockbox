@@ -13,6 +13,8 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
   const scannerRef = useRef<HTMLDivElement>(null);
   const html5QrCodeRef = useRef<unknown>(null);
   const onScanRef = useRef(onScan);
+  const lastScannedRef = useRef<string | null>(null);
+  const lastScanTimeRef = useRef<number>(0);
   const [error, setError] = useState<string | null>(null);
 
   // Keep callback ref in sync without triggering effect re-runs
@@ -21,6 +23,16 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
   }, [onScan]);
 
   const handleScan = useCallback((decodedText: string) => {
+    const now = Date.now();
+    // Debounce: ignore same barcode within 500ms
+    if (
+      decodedText === lastScannedRef.current &&
+      now - lastScanTimeRef.current < 500
+    ) {
+      return;
+    }
+    lastScannedRef.current = decodedText;
+    lastScanTimeRef.current = now;
     onScanRef.current(decodedText);
   }, []);
 
@@ -61,9 +73,16 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
           { facingMode: "environment" },
           {
             fps: 15,
-            qrbox: { width: 300, height: 200 },
+            qrbox: { width: 250, height: 160 },
+            aspectRatio: 1.777,
+            disableFlip: false,
+            // @ts-expect-error -- experimentalFeatures is supported but not in types
+            experimentalFeatures: {
+              useBarCodeDetectorIfSupported: true,
+            },
           },
           (decodedText: string) => {
+            // Continuous scanning - don't stop, just fire callback
             handleScan(decodedText);
           },
           () => {}

@@ -27,43 +27,84 @@ export function BarcodePrintView({ barcode, productName }: BarcodePrintViewProps
         <head>
           <title>Print Label - ${productName}</title>
           <style>
-            body {
+            @page {
+              size: 57mm 32mm;
               margin: 0;
-              padding: 20px;
-              font-family: sans-serif;
+            }
+            * {
+              box-sizing: border-box;
+              margin: 0;
+              padding: 0;
+            }
+            body {
+              width: 57mm;
+              height: 32mm;
+              margin: 0;
+              padding: 2mm;
+              font-family: Arial, Helvetica, sans-serif;
+              background: white;
+              color: black;
+              overflow: hidden;
+            }
+            .label {
+              display: flex;
+              align-items: center;
+              width: 100%;
+              height: 100%;
+              gap: 2mm;
+            }
+            .barcode-section {
+              flex: 1;
               display: flex;
               flex-direction: column;
               align-items: center;
               justify-content: center;
-              min-height: 100vh;
-              background: white;
-              color: black;
-            }
-            .label {
-              text-align: center;
-              padding: 20px;
-              border: 1px dashed #ccc;
-              border-radius: 8px;
+              min-width: 0;
+              overflow: hidden;
             }
             .product-name {
-              font-size: 18px;
+              font-size: 10pt;
               font-weight: bold;
-              margin-bottom: 10px;
+              line-height: 1.1;
+              text-align: center;
+              max-width: 100%;
+              overflow: hidden;
+              text-overflow: ellipsis;
+              white-space: nowrap;
+              margin-bottom: 1mm;
+            }
+            .barcode-section svg {
+              max-width: 100%;
+              height: auto;
+              max-height: 14mm;
+            }
+            .barcode-value {
+              font-size: 8pt;
+              font-family: 'Courier New', Courier, monospace;
+              text-align: center;
+              margin-top: 0.5mm;
             }
             .qr-section {
-              margin-top: 16px;
+              flex-shrink: 0;
+              width: 20mm;
+              height: 20mm;
               display: flex;
+              align-items: center;
               justify-content: center;
             }
-            @media print {
-              .label { border: none; }
+            .qr-section svg {
+              width: 20mm !important;
+              height: 20mm !important;
             }
           </style>
         </head>
         <body>
           <div class="label">
-            <div class="product-name">${productName}</div>
-            ${printBarcodeRef.current.innerHTML}
+            <div class="barcode-section">
+              <div class="product-name">${productName}</div>
+              ${printBarcodeRef.current.innerHTML}
+              <div class="barcode-value">${barcode}</div>
+            </div>
             <div class="qr-section">
               ${printQrRef.current.innerHTML}
             </div>
@@ -102,7 +143,7 @@ export function BarcodePrintView({ barcode, productName }: BarcodePrintViewProps
       <div ref={printQrRef} className="hidden">
         <QRCodeSVG
           value={barcode}
-          size={120}
+          size={76}
           bgColor="#ffffff"
           fgColor="#000000"
         />

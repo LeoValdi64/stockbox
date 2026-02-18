@@ -1,17 +1,15 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useCallback, useRef, useEffect } from "react";
 import Link from "next/link";
-import { ArrowLeft, ScanBarcode, Plus, Package } from "lucide-react";
+import { ArrowLeft, ScanBarcode, Plus, Minus, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { BarcodeScanner } from "@/components/barcode-scanner";
-import { getProductByBarcode } from "@/lib/actions/inventory";
+import { getProductByBarcode, adjustQuantity } from "@/lib/actions/inventory";
 import { toast } from "sonner";
 
 export default function ScanPage() {
-  const router = useRouter();
   const [scanning, setScanning] = useState(true);
   const [scannedProduct, setScannedProduct] = useState<{
     id: string;
@@ -20,17 +18,52 @@ export default function ScanPage() {
     salePrice: number | null;
   } | null>(null);
   const [scannedBarcode, setScannedBarcode] = useState<string | null>(null);
+  const [displayQuantity, setDisplayQuantity] = useState(0);
+  const autoResumeTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Clear auto-resume timer on unmount
+  useEffect(() => {
+    return () => {
+      if (autoResumeTimerRef.current) {
+        clearTimeout(autoResumeTimerRef.current);
+      }
+    };
+  }, []);
+
+  const resumeScanning = useCallback(() => {
+    if (autoResumeTimerRef.current) {
+      clearTimeout(autoResumeTimerRef.current);
+      autoResumeTimerRef.current = null;
+    }
+    setScanning(true);
+    setScannedProduct(null);
+    setScannedBarcode(null);
+  }, []);
+
+  const scheduleAutoResume = useCallback(() => {
+    if (autoResumeTimerRef.current) {
+      clearTimeout(autoResumeTimerRef.current);
+    }
+    autoResumeTimerRef.current = setTimeout(() => {
+      resumeScanning();
+    }, 1500);
+  }, [resumeScanning]);
 
   const handleScan = useCallback(
     async (barcode: string) => {
       setScanning(false);
       setScannedBarcode(barcode);
+      if (autoResumeTimerRef.current) {
+        clearTimeout(autoResumeTimerRef.current);
+        autoResumeTimerRef.current = null;
+      }
       toast.info(`Scanned: ${barcode}`);
 
       try {
         const product = await getProductByBarcode(barcode);
         if (product) {
           setScannedProduct(product);
+          setDisplayQuantity(product.quantity);
         } else {
           setScannedProduct(null);
         }
@@ -39,6 +72,33 @@ export default function ScanPage() {
       }
     },
     []
+  );
+
+  const handleAdjust = useCallback(
+    async (delta: number) => {
+      if (!scannedProduct) return;
+
+      // Optimistic update
+      const newQty = Math.max(0, displayQuantity + delta);
+      setDisplayQuantity(newQty);
+
+      try {
+        const serverQty = await adjustQuantity(scannedProduct.id, delta);
+        setDisplayQuantity(serverQty);
+        toast.success(
+          `${scannedProduct.name}: ${serverQty} in stock`
+        );
+      } catch {
+        // Revert on error
+        setDisplayQuantity(displayQuantity);
+        toast.error("Failed to update quantity");
+        return;
+      }
+
+      // Auto-resume scanning after 1.5s
+      scheduleAutoResume();
+    },
+    [scannedProduct, displayQuantity, scheduleAutoResume]
   );
 
   return (
@@ -77,27 +137,56 @@ export default function ScanPage() {
                   </div>
                   <div className="flex-1">
                     <p className="font-medium">{scannedProduct.name}</p>
-                    <p className="text-sm text-zinc-400">
-                      {scannedProduct.quantity} in stock
-                      {scannedProduct.salePrice !== null &&
-                        ` · $${scannedProduct.salePrice.toFixed(2)}`}
-                    </p>
+                    {scannedProduct.salePrice !== null && (
+                      <p className="text-sm text-zinc-400">
+                        ${scannedProduct.salePrice.toFixed(2)}
+                      </p>
+                    )}
                   </div>
                 </div>
-                <div className="mt-4 flex gap-2">
-                  <Button className="flex-1" asChild>
-                    <Link href={`/inventory/${scannedProduct.id}`}>
-                      View Product
-                    </Link>
-                  </Button>
+
+                {/* Big quantity display with +/- buttons */}
+                <div className="mt-5 flex items-center justify-center gap-4">
                   <Button
                     variant="outline"
-                    className="flex-1"
-                    onClick={() => {
-                      setScanning(true);
-                      setScannedProduct(null);
-                      setScannedBarcode(null);
-                    }}
+                    size="icon"
+                    className="h-14 w-14 rounded-full border-zinc-700 text-xl"
+                    onClick={() => handleAdjust(-1)}
+                    disabled={displayQuantity <= 0}
+                  >
+                    <Minus className="h-6 w-6" />
+                  </Button>
+                  <div className="text-center">
+                    <p className="text-5xl font-bold tabular-nums">
+                      {displayQuantity}
+                    </p>
+                    <p className="mt-1 text-xs text-zinc-500">in stock</p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-14 w-14 rounded-full border-zinc-700 text-xl"
+                    onClick={() => handleAdjust(1)}
+                  >
+                    <Plus className="h-6 w-6" />
+                  </Button>
+                </div>
+
+                {/* View Product link */}
+                <div className="mt-4 flex flex-col items-center gap-2">
+                  <Link
+                    href={`/inventory/${scannedProduct.id}`}
+                    className="text-sm text-zinc-400 underline underline-offset-2 hover:text-zinc-300"
+                  >
+                    View Product
+                  </Link>
+                </div>
+
+                <div className="mt-4">
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={resumeScanning}
                   >
                     Scan Again
                   </Button>
@@ -124,11 +213,7 @@ export default function ScanPage() {
                   <Button
                     variant="outline"
                     className="flex-1"
-                    onClick={() => {
-                      setScanning(true);
-                      setScannedProduct(null);
-                      setScannedBarcode(null);
-                    }}
+                    onClick={resumeScanning}
                   >
                     Scan Again
                   </Button>
