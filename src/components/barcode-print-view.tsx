@@ -12,10 +12,11 @@ interface BarcodePrintViewProps {
 }
 
 export function BarcodePrintView({ barcode, productName }: BarcodePrintViewProps) {
-  const printRef = useRef<HTMLDivElement>(null);
+  const printBarcodeRef = useRef<HTMLDivElement>(null);
+  const printQrRef = useRef<HTMLDivElement>(null);
 
   function handlePrint() {
-    if (!printRef.current) return;
+    if (!printBarcodeRef.current || !printQrRef.current) return;
 
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
@@ -35,6 +36,8 @@ export function BarcodePrintView({ barcode, productName }: BarcodePrintViewProps
               align-items: center;
               justify-content: center;
               min-height: 100vh;
+              background: white;
+              color: black;
             }
             .label {
               text-align: center;
@@ -47,6 +50,11 @@ export function BarcodePrintView({ barcode, productName }: BarcodePrintViewProps
               font-weight: bold;
               margin-bottom: 10px;
             }
+            .qr-section {
+              margin-top: 16px;
+              display: flex;
+              justify-content: center;
+            }
             @media print {
               .label { border: none; }
             }
@@ -55,7 +63,10 @@ export function BarcodePrintView({ barcode, productName }: BarcodePrintViewProps
         <body>
           <div class="label">
             <div class="product-name">${productName}</div>
-            ${printRef.current.innerHTML}
+            ${printBarcodeRef.current.innerHTML}
+            <div class="qr-section">
+              ${printQrRef.current.innerHTML}
+            </div>
           </div>
           <script>
             window.onload = function() {
@@ -83,8 +94,18 @@ export function BarcodePrintView({ barcode, productName }: BarcodePrintViewProps
           Print Label
         </Button>
       </div>
-      <div ref={printRef}>
-        <BarcodeDisplay value={barcode} />
+      <BarcodeDisplay value={barcode} />
+      {/* Hidden print-mode versions with black colors for printing */}
+      <div ref={printBarcodeRef} className="hidden">
+        <BarcodeDisplay value={barcode} printMode />
+      </div>
+      <div ref={printQrRef} className="hidden">
+        <QRCodeSVG
+          value={barcode}
+          size={120}
+          bgColor="#ffffff"
+          fgColor="#000000"
+        />
       </div>
       <div className="flex justify-center rounded-lg bg-zinc-800 p-4">
         <QRCodeSVG

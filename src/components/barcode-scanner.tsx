@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { Camera, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -12,37 +12,63 @@ interface BarcodeScannerProps {
 export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
   const scannerRef = useRef<HTMLDivElement>(null);
   const html5QrCodeRef = useRef<unknown>(null);
+  const onScanRef = useRef(onScan);
   const [error, setError] = useState<string | null>(null);
+
+  // Keep callback ref in sync without triggering effect re-runs
+  useEffect(() => {
+    onScanRef.current = onScan;
+  }, [onScan]);
+
+  const handleScan = useCallback((decodedText: string) => {
+    onScanRef.current(decodedText);
+  }, []);
 
   useEffect(() => {
     let scanner: { clear: () => Promise<void>; stop: () => Promise<void> } | null = null;
+    let stopped = false;
 
     async function startScanner() {
       try {
-        const { Html5Qrcode } = await import("html5-qrcode");
+        const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import("html5-qrcode");
 
-        if (!scannerRef.current) return;
+        if (!scannerRef.current || stopped) return;
 
         const scannerId = "barcode-scanner-" + Date.now();
         scannerRef.current.id = scannerId;
 
-        const html5QrCode = new Html5Qrcode(scannerId);
+        const formatsToSupport = [
+          Html5QrcodeSupportedFormats.QR_CODE,
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.UPC_A,
+          Html5QrcodeSupportedFormats.UPC_E,
+          Html5QrcodeSupportedFormats.EAN_8,
+          Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.CODE_93,
+          Html5QrcodeSupportedFormats.ITF,
+          Html5QrcodeSupportedFormats.CODABAR,
+        ];
+
+        const html5QrCode = new Html5Qrcode(scannerId, {
+          formatsToSupport,
+          verbose: false,
+        });
         html5QrCodeRef.current = html5QrCode;
         scanner = html5QrCode as unknown as typeof scanner;
 
         await html5QrCode.start(
           { facingMode: "environment" },
           {
-            fps: 10,
-            qrbox: { width: 250, height: 150 },
+            fps: 15,
+            qrbox: { width: 300, height: 200 },
           },
           (decodedText: string) => {
-            onScan(decodedText);
-            html5QrCode.stop().catch(() => {});
+            handleScan(decodedText);
           },
           () => {}
         );
-      } catch (err) {
+      } catch {
         setError(
           "Camera access denied. Please allow camera permissions to scan barcodes."
         );
@@ -52,13 +78,14 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
     startScanner();
 
     return () => {
+      stopped = true;
       if (scanner) {
         scanner.stop().then(() => scanner?.clear().catch(() => {})).catch(() => {
           scanner?.clear().catch(() => {});
         });
       }
     };
-  }, [onScan]);
+  }, [handleScan]);
 
   return (
     <div className="relative">
