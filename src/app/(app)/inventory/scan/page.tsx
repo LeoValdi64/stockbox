@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { ArrowLeft, ScanBarcode, Plus, Minus, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,9 @@ export default function ScanPage() {
     name: string;
     quantity: number;
     salePrice: number | null;
+    imageUrl: string | null;
+    category: string | null;
+    description: string | null;
   } | null>(null);
   const [scannedBarcode, setScannedBarcode] = useState<string | null>(null);
   const [displayQuantity, setDisplayQuantity] = useState(0);
@@ -39,6 +43,17 @@ export default function ScanPage() {
     setScannedProduct(null);
     setScannedBarcode(null);
   }, []);
+
+  // Listen for restart-scan event from bottom nav
+  useEffect(() => {
+    const handleRestart = () => {
+      resumeScanning();
+    };
+    window.addEventListener("stockbox:restart-scan", handleRestart);
+    return () => {
+      window.removeEventListener("stockbox:restart-scan", handleRestart);
+    };
+  }, [resumeScanning]);
 
   const scheduleAutoResume = useCallback(() => {
     if (autoResumeTimerRef.current) {
@@ -131,15 +146,35 @@ export default function ScanPage() {
           {scannedProduct ? (
             <Card className="border-zinc-800 bg-zinc-900">
               <CardContent className="pt-6">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-zinc-800">
-                    <Package className="h-6 w-6 text-zinc-400" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium">{scannedProduct.name}</p>
+                <div className="flex items-start gap-4">
+                  {scannedProduct.imageUrl ? (
+                    <Image
+                      src={scannedProduct.imageUrl}
+                      alt={scannedProduct.name}
+                      width={80}
+                      height={80}
+                      className="h-20 w-20 rounded-xl object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl bg-zinc-800">
+                      <Package className="h-8 w-8 text-zinc-400" />
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-lg font-medium">{scannedProduct.name}</p>
+                    {scannedProduct.category && (
+                      <p className="text-xs font-medium text-zinc-500">
+                        {scannedProduct.category}
+                      </p>
+                    )}
                     {scannedProduct.salePrice !== null && (
-                      <p className="text-sm text-zinc-400">
+                      <p className="mt-1 text-sm font-semibold text-emerald-400">
                         ${scannedProduct.salePrice.toFixed(2)}
+                      </p>
+                    )}
+                    {scannedProduct.description && (
+                      <p className="mt-1 line-clamp-2 text-xs text-zinc-400">
+                        {scannedProduct.description}
                       </p>
                     )}
                   </div>

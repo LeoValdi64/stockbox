@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   Package,
@@ -21,6 +21,16 @@ const navItems = [
 
 export function BottomNav() {
   const pathname = usePathname();
+  const router = useRouter();
+
+  const handleScanClick = () => {
+    if (pathname === "/inventory/scan") {
+      // Already on scan page — dispatch event to restart scanner
+      window.dispatchEvent(new CustomEvent("stockbox:restart-scan"));
+    } else {
+      router.push("/inventory/scan");
+    }
+  };
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-zinc-800 bg-zinc-950/95 backdrop-blur-lg safe-bottom">
@@ -32,15 +42,15 @@ export function BottomNav() {
 
           if (item.primary) {
             return (
-              <Link
+              <button
                 key={item.href}
-                href={item.href}
+                onClick={handleScanClick}
                 className="flex flex-col items-center"
               >
                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-zinc-950 shadow-lg shadow-white/10 transition-transform active:scale-95">
                   <Icon className="h-5 w-5" />
                 </div>
-              </Link>
+              </button>
             );
           }
 
