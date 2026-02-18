@@ -80,9 +80,20 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
     return () => {
       stopped = true;
       if (scanner) {
-        scanner.stop().then(() => scanner?.clear().catch(() => {})).catch(() => {
-          scanner?.clear().catch(() => {});
-        });
+        try {
+          const s = scanner;
+          const state = (s as unknown as { getState?: () => number })?.getState?.();
+          // Only stop if scanner is actively running (state 2 = scanning)
+          if (state === undefined || state === 2) {
+            s.stop().then(() => s.clear().catch(() => {})).catch(() => {
+              s.clear().catch(() => {});
+            });
+          } else {
+            s.clear().catch(() => {});
+          }
+        } catch {
+          // Scanner already stopped, ignore
+        }
       }
     };
   }, [handleScan]);
