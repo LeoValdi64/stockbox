@@ -3,7 +3,6 @@
 import { useState, useRef, useCallback } from "react";
 import { Camera, Upload, X, ImageIcon, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 
 interface ImageUploadProps {
@@ -20,7 +19,6 @@ async function compressImage(file: File): Promise<Blob> {
       const canvas = document.createElement("canvas");
       let { width, height } = img;
 
-      // Scale down if needed
       const maxDim = 1200;
       if (width > maxDim || height > maxDim) {
         if (width > height) {
@@ -37,7 +35,6 @@ async function compressImage(file: File): Promise<Blob> {
       const ctx = canvas.getContext("2d")!;
       ctx.drawImage(img, 0, 0, width, height);
 
-      // Start with high quality, reduce until under MAX_SIZE
       let quality = 0.8;
       const tryCompress = () => {
         canvas.toBlob(
@@ -80,24 +77,21 @@ export function ImageUpload({ value, onChange }: ImageUploadProps) {
       setUploading(true);
       try {
         const compressed = await compressImage(file);
-        const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
-        const path = `${fileName}`;
+        const formData = new FormData();
+        formData.append("file", compressed, "image.jpg");
 
-        if (!supabase) { toast.error("Storage not configured"); return; }
-        const { error } = await supabase.storage
-          .from("product-images")
-          .upload(path, compressed, {
-            contentType: "image/jpeg",
-            cacheControl: "3600",
-          });
+        const res = await fetch("/api/upload", {
+          method: "POST",
+          body: formData,
+        });
 
-        if (error) throw error;
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || "Upload failed");
+        }
 
-        const { data: urlData } = supabase!.storage
-          .from("product-images")
-          .getPublicUrl(path);
-
-        onChange(urlData.publicUrl);
+        const { url } = await res.json();
+        onChange(url);
         toast.success("Image uploaded");
       } catch (err) {
         toast.error("Failed to upload image");
@@ -124,12 +118,11 @@ export function ImageUpload({ value, onChange }: ImageUploadProps) {
 
   const handleRemove = async () => {
     if (value) {
-      // Extract path from URL
       try {
         const url = new URL(value);
         const parts = url.pathname.split("/product-images/");
         if (parts[1]) {
-          await supabase?.storage.from("product-images").remove([parts[1]]);
+          await fetch(`/api/upload/${parts[1]}`, { method: "DELETE" });
         }
       } catch {
         // Ignore cleanup errors
