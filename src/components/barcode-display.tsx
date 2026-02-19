@@ -19,7 +19,7 @@ export function BarcodeDisplay({ value, printMode = false }: BarcodeDisplayProps
           format: "CODE128",
           width: printMode ? 1.5 : 2,
           height: printMode ? 40 : 60,
-          displayValue: printMode,
+          displayValue: false,
           background: printMode ? "#ffffff" : "transparent",
           lineColor: printMode ? "#000000" : "#ffffff",
           fontSize: 14,
