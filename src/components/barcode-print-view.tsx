@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BarcodeDisplay } from "@/components/barcode-display";
@@ -12,11 +12,13 @@ interface BarcodePrintViewProps {
 }
 
 export function BarcodePrintView({ barcode, productName }: BarcodePrintViewProps) {
+  const [printType, setPrintType] = useState<"barcode" | "qr">("barcode");
   const printBarcodeRef = useRef<HTMLDivElement>(null);
   const printQrRef = useRef<HTMLDivElement>(null);
 
   function handlePrint() {
-    if (!printBarcodeRef.current || !printQrRef.current) return;
+    const ref = printType === "barcode" ? printBarcodeRef.current : printQrRef.current;
+    if (!ref) return;
 
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
@@ -45,22 +47,18 @@ export function BarcodePrintView({ barcode, productName }: BarcodePrintViewProps
               background: white;
               color: black;
               overflow: hidden;
-            }
-            .label {
               display: flex;
               align-items: center;
-              width: 100%;
-              height: 100%;
-              gap: 2mm;
+              justify-content: center;
             }
-            .barcode-section {
-              flex: 1;
+            .label {
               display: flex;
               flex-direction: column;
               align-items: center;
               justify-content: center;
-              min-width: 0;
-              overflow: hidden;
+              width: 100%;
+              height: 100%;
+              gap: 1mm;
             }
             .product-name {
               font-size: 10pt;
@@ -71,43 +69,32 @@ export function BarcodePrintView({ barcode, productName }: BarcodePrintViewProps
               overflow: hidden;
               text-overflow: ellipsis;
               white-space: nowrap;
-              margin-bottom: 1mm;
             }
-            .barcode-section svg {
-              max-width: 100%;
-              height: auto;
-              max-height: 14mm;
-            }
-            .barcode-value {
-              font-size: 8pt;
-              font-family: 'Courier New', Courier, monospace;
-              text-align: center;
-              margin-top: 0.5mm;
-            }
-            .qr-section {
-              flex-shrink: 0;
-              width: 20mm;
-              height: 20mm;
+            .code-container {
               display: flex;
               align-items: center;
               justify-content: center;
             }
-            .qr-section svg {
-              width: 20mm !important;
-              height: 20mm !important;
+            .code-container svg {
+              max-width: 100%;
+              height: auto;
+              max-height: 18mm;
+            }
+            .barcode-value {
+              font-size: 7pt;
+              font-family: 'Courier New', Courier, monospace;
+              text-align: center;
+              margin-top: 0.5mm;
             }
           </style>
         </head>
         <body>
           <div class="label">
-            <div class="barcode-section">
-              <div class="product-name">${productName}</div>
-              ${printBarcodeRef.current.innerHTML}
-              <div class="barcode-value">${barcode}</div>
+            <div class="product-name">${productName}</div>
+            <div class="code-container">
+              ${ref.innerHTML}
             </div>
-            <div class="qr-section">
-              ${printQrRef.current.innerHTML}
-            </div>
+            <div class="barcode-value">${barcode}</div>
           </div>
           <script>
             window.onload = function() {
@@ -135,8 +122,48 @@ export function BarcodePrintView({ barcode, productName }: BarcodePrintViewProps
           Print Label
         </Button>
       </div>
-      <BarcodeDisplay value={barcode} />
-      {/* Hidden print-mode versions with black colors for printing */}
+
+      {/* Toggle buttons */}
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => setPrintType("barcode")}
+          className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+            printType === "barcode"
+              ? "border-white bg-white text-black"
+              : "border-zinc-700 bg-zinc-800 text-zinc-400 hover:text-white"
+          }`}
+        >
+          Barcode
+        </button>
+        <button
+          type="button"
+          onClick={() => setPrintType("qr")}
+          className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+            printType === "qr"
+              ? "border-white bg-white text-black"
+              : "border-zinc-700 bg-zinc-800 text-zinc-400 hover:text-white"
+          }`}
+        >
+          QR Code
+        </button>
+      </div>
+
+      {/* Display selected */}
+      {printType === "barcode" ? (
+        <BarcodeDisplay value={barcode} />
+      ) : (
+        <div className="flex justify-center rounded-lg bg-zinc-800 p-4">
+          <QRCodeSVG
+            value={barcode}
+            size={120}
+            bgColor="transparent"
+            fgColor="#d4d4d8"
+          />
+        </div>
+      )}
+
+      {/* Hidden print-mode versions */}
       <div ref={printBarcodeRef} className="hidden">
         <BarcodeDisplay value={barcode} printMode />
       </div>
@@ -146,14 +173,6 @@ export function BarcodePrintView({ barcode, productName }: BarcodePrintViewProps
           size={76}
           bgColor="#ffffff"
           fgColor="#000000"
-        />
-      </div>
-      <div className="flex justify-center rounded-lg bg-zinc-800 p-4">
-        <QRCodeSVG
-          value={barcode}
-          size={120}
-          bgColor="transparent"
-          fgColor="#d4d4d8"
         />
       </div>
     </div>
