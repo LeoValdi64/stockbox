@@ -20,7 +20,7 @@ export function BarcodeDisplay({ value, printMode = false }: BarcodeDisplayProps
           height: printMode ? 40 : 60,
           displayValue: !printMode,
           background: printMode ? "#ffffff" : "transparent",
-          lineColor: printMode ? "#000000" : "#d4d4d8",
+          lineColor: printMode ? "#000000" : "#ffffff",
           fontSize: 14,
           font: "monospace",
           margin: printMode ? 0 : 10,
