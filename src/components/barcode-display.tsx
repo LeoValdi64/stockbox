@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import JsBarcode from "jsbarcode";
 
 interface BarcodeDisplayProps {
@@ -10,6 +10,7 @@ interface BarcodeDisplayProps {
 
 export function BarcodeDisplay({ value, printMode = false }: BarcodeDisplayProps) {
   const svgRef = useRef<SVGSVGElement>(null);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     if (svgRef.current && value) {
@@ -18,16 +19,17 @@ export function BarcodeDisplay({ value, printMode = false }: BarcodeDisplayProps
           format: "CODE128",
           width: printMode ? 1.5 : 2,
           height: printMode ? 40 : 60,
-          displayValue: !printMode,
+          displayValue: printMode,
           background: printMode ? "#ffffff" : "transparent",
           lineColor: printMode ? "#000000" : "#ffffff",
           fontSize: 14,
           font: "monospace",
           margin: printMode ? 0 : 10,
-          textMargin: printMode ? 0 : undefined,
+          textMargin: 0,
         });
+        setError(false);
       } catch {
-        // Invalid barcode format, show text fallback
+        setError(true);
       }
     }
   }, [value, printMode]);
@@ -37,8 +39,14 @@ export function BarcodeDisplay({ value, printMode = false }: BarcodeDisplayProps
   }
 
   return (
-    <div className="mt-2 flex justify-center rounded-lg bg-zinc-800 p-4">
+    <div className="mt-2 flex flex-col items-center gap-2 rounded-lg bg-zinc-800 p-4">
       <svg ref={svgRef} />
+      {!error && value && (
+        <span className="font-mono text-xs text-zinc-400">{value}</span>
+      )}
+      {error && (
+        <span className="text-xs text-red-400">Invalid barcode format</span>
+      )}
     </div>
   );
 }
