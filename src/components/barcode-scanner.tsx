@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Camera, X } from "lucide-react";
+import { Camera, X, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface BarcodeScannerProps {
@@ -10,24 +10,25 @@ interface BarcodeScannerProps {
 }
 
 export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
-  const scannerRef = useRef<HTMLDivElement>(null);
-  const html5QrCodeRef = useRef<unknown>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const onScanRef = useRef(onScan);
   const lastScannedRef = useRef<string | null>(null);
   const lastScanTimeRef = useRef<number>(0);
+  const streamRef = useRef<MediaStream | null>(null);
+  const animFrameRef = useRef<number>(0);
   const [error, setError] = useState<string | null>(null);
+  const [scanning, setScanning] = useState(true);
 
-  // Keep callback ref in sync without triggering effect re-runs
   useEffect(() => {
     onScanRef.current = onScan;
   }, [onScan]);
 
   const handleScan = useCallback((decodedText: string) => {
     const now = Date.now();
-    // Debounce: ignore same barcode within 500ms
     if (
       decodedText === lastScannedRef.current &&
-      now - lastScanTimeRef.current < 500
+      now - lastScanTimeRef.current < 1000
     ) {
       return;
     }
@@ -37,19 +38,111 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
   }, []);
 
   useEffect(() => {
-    let scanner: { clear: () => Promise<void>; stop: () => Promise<void> } | null = null;
     let stopped = false;
+    let detector: { detect: (source: HTMLVideoElement) => Promise<Array<{ rawValue: string }>> } | null = null;
 
-    async function startScanner() {
+    async function start() {
       try {
-        const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import("html5-qrcode");
+        // Get camera stream
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: "environment",
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+          },
+        });
 
-        if (!scannerRef.current || stopped) return;
+        if (stopped) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
 
-        const scannerId = "barcode-scanner-" + Date.now();
-        scannerRef.current.id = scannerId;
+        streamRef.current = stream;
 
-        const formatsToSupport = [
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play();
+        }
+
+        // Try native BarcodeDetector first (Chrome 83+, much faster)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const win = window as any;
+        if ("BarcodeDetector" in window) {
+          try {
+            detector = new win.BarcodeDetector({
+              formats: [
+                "code_128",
+                "ean_13",
+                "ean_8",
+                "upc_a",
+                "upc_e",
+                "code_39",
+                "code_93",
+                "itf",
+                "codabar",
+                "qr_code",
+              ],
+            });
+          } catch {
+            detector = null;
+          }
+        }
+
+        // If no native detector, fall back to html5-qrcode
+        if (!detector) {
+          await startFallbackScanner();
+          return;
+        }
+
+        // Native scanning loop - runs at ~30fps, very fast
+        async function scanLoop() {
+          if (stopped || !videoRef.current || !detector) return;
+
+          try {
+            const barcodes = await detector.detect(videoRef.current);
+            if (barcodes.length > 0) {
+              handleScan(barcodes[0].rawValue);
+            }
+          } catch {
+            // Ignore detection errors
+          }
+
+          if (!stopped) {
+            animFrameRef.current = requestAnimationFrame(scanLoop);
+          }
+        }
+
+        scanLoop();
+      } catch {
+        setError(
+          "Camera access denied. Please allow camera permissions to scan barcodes."
+        );
+        setScanning(false);
+      }
+    }
+
+    async function startFallbackScanner() {
+      // Fallback: use html5-qrcode with aggressive settings
+      try {
+        const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import(
+          "html5-qrcode"
+        );
+
+        if (stopped || !canvasRef.current) return;
+
+        // Stop the direct video since html5-qrcode manages its own
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach((t) => t.stop());
+          streamRef.current = null;
+        }
+        if (videoRef.current) {
+          videoRef.current.srcObject = null;
+        }
+
+        const scannerId = "barcode-fallback-" + Date.now();
+        canvasRef.current.id = scannerId;
+
+        const formats = [
           Html5QrcodeSupportedFormats.QR_CODE,
           Html5QrcodeSupportedFormats.CODE_128,
           Html5QrcodeSupportedFormats.EAN_13,
@@ -63,56 +156,38 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
         ];
 
         const html5QrCode = new Html5Qrcode(scannerId, {
-          formatsToSupport,
+          formatsToSupport: formats,
           verbose: false,
         });
-        html5QrCodeRef.current = html5QrCode;
-        scanner = html5QrCode as unknown as typeof scanner;
 
         await html5QrCode.start(
           { facingMode: "environment" },
           {
-            fps: 15,
-            qrbox: { width: 250, height: 160 },
+            fps: 30,
+            qrbox: { width: 350, height: 200 },
             aspectRatio: 1.777,
             disableFlip: false,
-            // @ts-expect-error -- experimentalFeatures is supported but not in types
-            experimentalFeatures: {
-              useBarCodeDetectorIfSupported: true,
-            },
           },
           (decodedText: string) => {
-            // Continuous scanning - don't stop, just fire callback
             handleScan(decodedText);
           },
           () => {}
         );
       } catch {
-        setError(
-          "Camera access denied. Please allow camera permissions to scan barcodes."
-        );
+        setError("Failed to start scanner.");
+        setScanning(false);
       }
     }
 
-    startScanner();
+    start();
 
     return () => {
       stopped = true;
-      if (scanner) {
-        try {
-          const s = scanner;
-          const state = (s as unknown as { getState?: () => number })?.getState?.();
-          // Only stop if scanner is actively running (state 2 = scanning)
-          if (state === undefined || state === 2) {
-            s.stop().then(() => s.clear().catch(() => {})).catch(() => {
-              s.clear().catch(() => {});
-            });
-          } else {
-            s.clear().catch(() => {});
-          }
-        } catch {
-          // Scanner already stopped, ignore
-        }
+      if (animFrameRef.current) {
+        cancelAnimationFrame(animFrameRef.current);
+      }
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop());
       }
     };
   }, [handleScan]);
@@ -129,16 +204,37 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
           <X className="h-4 w-4" />
         </Button>
       )}
+      {scanning && (
+        <div className="absolute left-3 top-3 z-10 flex items-center gap-1.5 rounded-full bg-green-500/20 px-2.5 py-1">
+          <Zap className="h-3 w-3 text-green-400" />
+          <span className="text-xs font-medium text-green-400">Scanning</span>
+        </div>
+      )}
       {error ? (
         <div className="flex flex-col items-center gap-4 rounded-xl bg-zinc-900 p-8 text-center">
           <Camera className="h-12 w-12 text-zinc-600" />
           <p className="text-sm text-zinc-400">{error}</p>
         </div>
       ) : (
-        <div
-          ref={scannerRef}
-          className="overflow-hidden rounded-xl bg-zinc-900"
-        />
+        <div className="relative overflow-hidden rounded-xl bg-zinc-900">
+          <video
+            ref={videoRef}
+            className="w-full"
+            playsInline
+            muted
+            autoPlay
+          />
+          {/* Scan area guide */}
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <div className="h-32 w-72 rounded-lg border-2 border-white/30" />
+          </div>
+          {/* Fallback container (hidden when native detector works) */}
+          <div
+            ref={canvasRef}
+            className="absolute inset-0"
+            style={{ display: "none" }}
+          />
+        </div>
       )}
     </div>
   );
