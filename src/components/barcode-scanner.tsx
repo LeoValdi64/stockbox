@@ -9,16 +9,20 @@ interface BarcodeScannerProps {
   onClose?: () => void;
 }
 
+function hasNativeBarcodeDetector(): boolean {
+  return typeof window !== "undefined" && "BarcodeDetector" in window;
+}
+
 export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLDivElement>(null);
+  const fallbackRef = useRef<HTMLDivElement>(null);
   const onScanRef = useRef(onScan);
   const lastScannedRef = useRef<string | null>(null);
   const lastScanTimeRef = useRef<number>(0);
   const streamRef = useRef<MediaStream | null>(null);
   const animFrameRef = useRef<number>(0);
   const [error, setError] = useState<string | null>(null);
-  const [scanning, setScanning] = useState(true);
+  const [mode, setMode] = useState<"native" | "fallback" | null>(null);
 
   useEffect(() => {
     onScanRef.current = onScan;
@@ -39,11 +43,11 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
 
   useEffect(() => {
     let stopped = false;
-    let detector: { detect: (source: HTMLVideoElement) => Promise<Array<{ rawValue: string }>> } | null = null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let html5Scanner: any = null;
 
-    async function start() {
+    async function startNative() {
       try {
-        // Get camera stream
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: "environment",
@@ -64,83 +68,52 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
           await videoRef.current.play();
         }
 
-        // Try native BarcodeDetector first (Chrome 83+, much faster)
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const win = window as any;
-        if ("BarcodeDetector" in window) {
-          try {
-            detector = new win.BarcodeDetector({
-              formats: [
-                "code_128",
-                "ean_13",
-                "ean_8",
-                "upc_a",
-                "upc_e",
-                "code_39",
-                "code_93",
-                "itf",
-                "codabar",
-                "qr_code",
-              ],
-            });
-          } catch {
-            detector = null;
-          }
-        }
+        const detector = new win.BarcodeDetector({
+          formats: [
+            "code_128", "ean_13", "ean_8", "upc_a", "upc_e",
+            "code_39", "code_93", "itf", "codabar", "qr_code",
+          ],
+        });
 
-        // If no native detector, fall back to html5-qrcode
-        if (!detector) {
-          await startFallbackScanner();
-          return;
-        }
+        setMode("native");
 
-        // Native scanning loop - runs at ~30fps, very fast
         async function scanLoop() {
-          if (stopped || !videoRef.current || !detector) return;
-
+          if (stopped || !videoRef.current) return;
           try {
             const barcodes = await detector.detect(videoRef.current);
             if (barcodes.length > 0) {
               handleScan(barcodes[0].rawValue);
             }
           } catch {
-            // Ignore detection errors
+            // ignore
           }
-
           if (!stopped) {
             animFrameRef.current = requestAnimationFrame(scanLoop);
           }
         }
-
         scanLoop();
       } catch {
-        setError(
-          "Camera access denied. Please allow camera permissions to scan barcodes."
-        );
-        setScanning(false);
+        // Native failed, try fallback
+        if (!stopped) await startFallback();
       }
     }
 
-    async function startFallbackScanner() {
-      // Fallback: use html5-qrcode with aggressive settings
+    async function startFallback() {
       try {
-        const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import(
-          "html5-qrcode"
-        );
+        const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import("html5-qrcode");
 
-        if (stopped || !canvasRef.current) return;
+        if (stopped || !fallbackRef.current) return;
 
-        // Stop the direct video since html5-qrcode manages its own
+        // Stop any existing video stream
         if (streamRef.current) {
           streamRef.current.getTracks().forEach((t) => t.stop());
           streamRef.current = null;
         }
-        if (videoRef.current) {
-          videoRef.current.srcObject = null;
-        }
 
         const scannerId = "barcode-fallback-" + Date.now();
-        canvasRef.current.id = scannerId;
+        fallbackRef.current.id = scannerId;
 
         const formats = [
           Html5QrcodeSupportedFormats.QR_CODE,
@@ -155,17 +128,19 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
           Html5QrcodeSupportedFormats.CODABAR,
         ];
 
-        const html5QrCode = new Html5Qrcode(scannerId, {
+        html5Scanner = new Html5Qrcode(scannerId, {
           formatsToSupport: formats,
           verbose: false,
         });
 
-        await html5QrCode.start(
+        setMode("fallback");
+
+        await html5Scanner.start(
           { facingMode: "environment" },
           {
-            fps: 30,
-            qrbox: { width: 350, height: 200 },
-            aspectRatio: 1.777,
+            fps: 20,
+            qrbox: { width: 300, height: 180 },
+            aspectRatio: 1.5,
             disableFlip: false,
           },
           (decodedText: string) => {
@@ -174,12 +149,16 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
           () => {}
         );
       } catch {
-        setError("Failed to start scanner.");
-        setScanning(false);
+        setError("Camera access denied. Please allow camera permissions.");
       }
     }
 
-    start();
+    // Safari/iOS: go straight to fallback (no BarcodeDetector)
+    if (hasNativeBarcodeDetector()) {
+      startNative();
+    } else {
+      startFallback();
+    }
 
     return () => {
       stopped = true;
@@ -188,6 +167,13 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
       }
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((t) => t.stop());
+      }
+      if (html5Scanner) {
+        try {
+          html5Scanner.stop().then(() => html5Scanner.clear().catch(() => {})).catch(() => {
+            try { html5Scanner.clear(); } catch {}
+          });
+        } catch {}
       }
     };
   }, [handleScan]);
@@ -204,7 +190,7 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
           <X className="h-4 w-4" />
         </Button>
       )}
-      {scanning && (
+      {mode && (
         <div className="absolute left-3 top-3 z-10 flex items-center gap-1.5 rounded-full bg-green-500/20 px-2.5 py-1">
           <Zap className="h-3 w-3 text-green-400" />
           <span className="text-xs font-medium text-green-400">Scanning</span>
@@ -217,23 +203,32 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
         </div>
       ) : (
         <div className="relative overflow-hidden rounded-xl bg-zinc-900">
+          {/* Native video (Chrome/Edge) */}
           <video
             ref={videoRef}
             className="w-full"
             playsInline
             muted
             autoPlay
+            style={{ display: mode === "native" ? "block" : "none" }}
           />
-          {/* Scan area guide */}
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-            <div className="h-32 w-72 rounded-lg border-2 border-white/30" />
-          </div>
-          {/* Fallback container (hidden when native detector works) */}
+          {/* Scan area guide for native */}
+          {mode === "native" && (
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+              <div className="h-32 w-72 rounded-lg border-2 border-white/30" />
+            </div>
+          )}
+          {/* Fallback container (html5-qrcode for Safari/iOS) */}
           <div
-            ref={canvasRef}
-            className="absolute inset-0"
-            style={{ display: "none" }}
+            ref={fallbackRef}
+            style={{ display: mode === "fallback" || mode === null ? "block" : "none" }}
           />
+          {/* Loading state */}
+          {mode === null && !error && (
+            <div className="flex h-64 items-center justify-center">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-zinc-600 border-t-white" />
+            </div>
+          )}
         </div>
       )}
     </div>
