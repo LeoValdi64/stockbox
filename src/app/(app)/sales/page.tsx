@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Plus, ShoppingCart } from "lucide-react";
+import { Plus, ShoppingCart, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -80,21 +80,34 @@ export default async function SalesPage() {
                         {sale.notes}
                       </p>
                     )}
-                    <div className="mt-2 space-y-0.5">
+                    <div className="mt-2 space-y-1">
                       {sale.items.map(
                         (item: {
                           id: string;
                           quantity: number;
                           priceAtSale: number;
-                          product: { name: string };
+                          product: { name: string; imageUrl?: string | null };
                         }) => (
-                          <p
+                          <div
                             key={item.id}
-                            className="text-xs text-zinc-500"
+                            className="flex items-center gap-2"
                           >
-                            {item.quantity}x {item.product.name} @$
-                            {item.priceAtSale.toFixed(2)}
-                          </p>
+                            {item.product.imageUrl ? (
+                              <img
+                                src={item.product.imageUrl}
+                                alt={item.product.name}
+                                className="h-6 w-6 shrink-0 rounded object-cover"
+                              />
+                            ) : (
+                              <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-zinc-700">
+                                <Package className="h-3 w-3 text-zinc-400" />
+                              </div>
+                            )}
+                            <span className="text-xs text-zinc-500">
+                              {item.quantity}x {item.product.name} @$
+                              {item.priceAtSale.toFixed(2)}
+                            </span>
+                          </div>
                         )
                       )}
                     </div>

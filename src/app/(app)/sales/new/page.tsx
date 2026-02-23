@@ -12,6 +12,7 @@ import {
   ShoppingCart,
   ScanBarcode,
   Loader2,
+  Package,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,6 +30,7 @@ interface CartItem {
   price: number;
   quantity: number;
   maxQuantity: number;
+  imageUrl: string | null;
 }
 
 export default function NewSalePage() {
@@ -68,6 +70,7 @@ export default function NewSalePage() {
     name: string;
     salePrice: number | null;
     quantity: number;
+    imageUrl?: string | null;
   }) {
     const existing = cart.find((item) => item.productId === product.id);
     if (existing) {
@@ -91,6 +94,7 @@ export default function NewSalePage() {
           price: product.salePrice ?? 0,
           quantity: 1,
           maxQuantity: product.quantity,
+          imageUrl: product.imageUrl ?? null,
         },
       ]);
     }
@@ -248,11 +252,24 @@ export default function NewSalePage() {
                   key={item.productId}
                   className="flex items-center justify-between rounded-lg bg-zinc-800/50 px-3 py-2"
                 >
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{item.name}</p>
-                    <p className="text-xs text-zinc-500">
-                      ${item.price.toFixed(2)} each
-                    </p>
+                  <div className="flex min-w-0 flex-1 items-center gap-3">
+                    {item.imageUrl ? (
+                      <img
+                        src={item.imageUrl}
+                        alt={item.name}
+                        className="h-10 w-10 shrink-0 rounded-md object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-zinc-700">
+                        <Package className="h-5 w-5 text-zinc-400" />
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{item.name}</p>
+                      <p className="text-xs text-zinc-500">
+                        ${item.price.toFixed(2)} each
+                      </p>
+                    </div>
                   </div>
                   <div className="flex items-center gap-1">
                     <Button
