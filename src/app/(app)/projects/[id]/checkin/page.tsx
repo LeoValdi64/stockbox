@@ -3,9 +3,11 @@
 import { useState, useTransition, useEffect, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import {
   ArrowLeft,
   ScanBarcode,
+  Search,
   Minus,
   Plus,
   Trash2,
@@ -14,8 +16,12 @@ import {
   Package,
   Box,
   Check,
+  CheckCircle2,
+  Ban,
 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -29,20 +35,21 @@ import { BarcodeScanner } from "@/components/barcode-scanner";
 import { getProductByBarcode } from "@/lib/actions/inventory";
 import { getAssetByBarcode } from "@/lib/actions/assets";
 import { getProject } from "@/lib/actions/projects";
-import { getProjectCheckedOutItems } from "@/lib/actions/transfers";
-import { createCheckin } from "@/lib/actions/transfers";
+import { getProjectCheckedOutItems, createCheckin } from "@/lib/actions/transfers";
 import { toast } from "sonner";
 
 interface CheckinItem {
   productId: string;
   productName: string;
   trackingType: string;
+  imageUrl?: string;
   assetId?: string;
   assetBarcode?: string;
   serialNumber?: string;
   quantity: number;
   maxQuantity?: number;
   condition: string;
+  consumed: boolean;
 }
 
 export default function CheckinPage() {
@@ -52,16 +59,19 @@ export default function CheckinPage() {
   const [projectName, setProjectName] = useState("");
   const [items, setItems] = useState<CheckinItem[]>([]);
   const [showScanner, setShowScanner] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const [isPending, startTransition] = useTransition();
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [confirmedCount, setConfirmedCount] = useState(0);
   const [checkedOutItems, setCheckedOutItems] = useState<{
-    bulkItems: { productId: string; productName: string; quantity: number }[];
+    bulkItems: { productId: string; productName: string; quantity: number; imageUrl?: string }[];
     assets: {
       id: string;
       barcode: string;
       serialNumber: string | null;
       condition: string;
       productId: string;
-      product: { id: string; name: string };
+      product: { id: string; name: string; imageUrl?: string | null };
     }[];
   }>({ bulkItems: [], assets: [] });
   const beepRef = useRef<AudioContext | null>(null);
@@ -111,11 +121,13 @@ export default function CheckinPage() {
               productId: asset.productId,
               productName: asset.product.name,
               trackingType: "serialized",
+              imageUrl: asset.product.imageUrl || undefined,
               assetId: asset.id,
               assetBarcode: asset.barcode,
               serialNumber: asset.serialNumber || undefined,
               quantity: 1,
               condition: asset.condition,
+              consumed: false,
             },
           ]);
           playBeep();
@@ -157,9 +169,11 @@ export default function CheckinPage() {
                 productId: product.id,
                 productName: product.name,
                 trackingType: "bulk",
+                imageUrl: product.imageUrl || undefined,
                 quantity: 1,
                 maxQuantity: checkedOutItem.quantity,
                 condition: "good",
+                consumed: false,
               },
             ]);
           }
@@ -190,7 +204,17 @@ export default function CheckinPage() {
   }
 
   function updateCondition(index: number, condition: string) {
-    setItems(items.map((item, i) => (i === index ? { ...item, condition } : item)));
+    setItems(
+      items.map((item, i) => (i === index ? { ...item, condition } : item))
+    );
+  }
+
+  function toggleConsumed(index: number) {
+    setItems(
+      items.map((item, i) =>
+        i === index ? { ...item, consumed: !item.consumed } : item
+      )
+    );
   }
 
   function removeItem(index: number) {
@@ -205,27 +229,79 @@ export default function CheckinPage() {
 
     startTransition(async () => {
       try {
-        await createCheckin({
-          projectId,
-          items: items.map((item) => ({
-            productId: item.productId,
-            assetId: item.assetId,
-            quantity: item.quantity,
-            condition: item.condition,
-          })),
-        });
-        toast.success(
-          `Checked in ${items.length} item${items.length !== 1 ? "s" : ""}`
-        );
-        router.push(`/projects/${projectId}`);
+        // Items marked consumed don't get checked in (quantity stays deducted)
+        const returningItems = items.filter((i) => !i.consumed);
+        if (returningItems.length > 0) {
+          await createCheckin({
+            projectId,
+            items: returningItems.map((item) => ({
+              productId: item.productId,
+              assetId: item.assetId,
+              quantity: item.quantity,
+              condition: item.condition,
+            })),
+          });
+        }
+        setConfirmedCount(items.length);
+        setShowSuccess(true);
       } catch {
         toast.error("Failed to check in items");
       }
     });
   }
 
+  // Filter checked-out items by search query for quick-add
+  const filteredBulkItems = searchQuery.trim()
+    ? checkedOutItems.bulkItems.filter((i) =>
+        i.productName.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : [];
+
+  // Success screen
+  if (showSuccess) {
+    const consumedItems = items.filter((i) => i.consumed);
+    const returnedItems = items.filter((i) => !i.consumed);
+
+    return (
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="flex min-h-[60vh] flex-col items-center justify-center gap-6 text-center"
+      >
+        <motion.div
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          transition={{ type: "spring", delay: 0.1, stiffness: 200 }}
+        >
+          <CheckCircle2 className="h-20 w-20 text-emerald-400" />
+        </motion.div>
+        <div>
+          <h2 className="text-2xl font-bold">Check-In Complete</h2>
+          <p className="mt-1 text-zinc-400">
+            {returnedItems.length > 0 && (
+              <>
+                {returnedItems.length} item
+                {returnedItems.length !== 1 ? "s" : ""} returned
+              </>
+            )}
+            {consumedItems.length > 0 && (
+              <>
+                {returnedItems.length > 0 ? ", " : ""}
+                {consumedItems.length} consumed
+              </>
+            )}
+          </p>
+        </div>
+        <Button variant="outline" asChild>
+          <Link href={`/projects/${projectId}`}>View Project</Link>
+        </Button>
+      </motion.div>
+    );
+  }
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pb-24">
+      {/* Header */}
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" asChild>
           <Link href={`/projects/${projectId}`}>
@@ -250,12 +326,20 @@ export default function CheckinPage() {
           ) : (
             <div className="flex flex-wrap gap-1">
               {checkedOutItems.bulkItems.map((item) => (
-                <Badge key={item.productId} variant="secondary" className="text-[10px]">
+                <Badge
+                  key={item.productId}
+                  variant="secondary"
+                  className="text-[10px]"
+                >
                   {item.productName} x{item.quantity}
                 </Badge>
               ))}
               {checkedOutItems.assets.map((asset) => (
-                <Badge key={asset.id} variant="secondary" className="text-[10px]">
+                <Badge
+                  key={asset.id}
+                  variant="secondary"
+                  className="text-[10px]"
+                >
                   {asset.product.name} ({asset.barcode})
                 </Badge>
               ))}
@@ -286,6 +370,78 @@ export default function CheckinPage() {
         </Button>
       )}
 
+      {/* Search for bulk items at this project */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+        <Input
+          placeholder="Search items at this project..."
+          className="border-zinc-800 bg-zinc-900 pl-9"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
+      </div>
+
+      <AnimatePresence>
+        {filteredBulkItems.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+          >
+            <Card className="border-zinc-800 bg-zinc-900">
+              <CardContent className="p-2">
+                {filteredBulkItems.map((item) => (
+                  <button
+                    key={item.productId}
+                    className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-zinc-800"
+                    onClick={() => {
+                      const existing = items.find(
+                        (i) => i.productId === item.productId && !i.assetId
+                      );
+                      if (existing) {
+                        setItems(
+                          items.map((i) =>
+                            i.productId === item.productId && !i.assetId
+                              ? { ...i, quantity: i.quantity + 1 }
+                              : i
+                          )
+                        );
+                      } else {
+                        setItems([
+                          ...items,
+                          {
+                            productId: item.productId,
+                            productName: item.productName,
+                            trackingType: "bulk",
+                            quantity: 1,
+                            maxQuantity: item.quantity,
+                            condition: "good",
+                            consumed: false,
+                          },
+                        ]);
+                      }
+                      setSearchQuery("");
+                      toast.success(`Added: ${item.productName}`);
+                    }}
+                  >
+                    <div className="flex h-8 w-8 items-center justify-center rounded bg-zinc-800">
+                      <Package className="h-4 w-4 text-zinc-500" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">{item.productName}</p>
+                      <p className="text-xs text-zinc-500">
+                        {item.quantity} at project
+                      </p>
+                    </div>
+                    <Plus className="h-4 w-4 text-zinc-400" />
+                  </button>
+                ))}
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Items List */}
       <Card className="border-zinc-800 bg-zinc-900">
         <CardContent className="pt-4 pb-4">
@@ -300,111 +456,162 @@ export default function CheckinPage() {
             </p>
           ) : (
             <div className="space-y-2">
-              {items.map((item, index) => (
-                <div
-                  key={`${item.productId}-${item.assetId || index}`}
-                  className="rounded-lg bg-zinc-800/50 px-3 py-2"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        {item.assetId ? (
-                          <Box className="h-3.5 w-3.5 text-zinc-400" />
-                        ) : (
-                          <Package className="h-3.5 w-3.5 text-zinc-400" />
-                        )}
-                        <p className="truncate text-sm font-medium">
+              <AnimatePresence initial={false}>
+                {items.map((item, index) => (
+                  <motion.div
+                    key={`${item.productId}-${item.assetId || "bulk"}`}
+                    initial={{ opacity: 0, x: -20, height: 0 }}
+                    animate={{ opacity: 1, x: 0, height: "auto" }}
+                    exit={{ opacity: 0, x: 20, height: 0 }}
+                    transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                    className={`rounded-lg px-3 py-2 ${
+                      item.consumed
+                        ? "bg-zinc-800/30 opacity-60"
+                        : "bg-zinc-800/50"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      {/* Thumbnail */}
+                      {item.imageUrl ? (
+                        <Image
+                          src={item.imageUrl}
+                          alt={item.productName}
+                          width={36}
+                          height={36}
+                          className="h-9 w-9 flex-shrink-0 rounded object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded bg-zinc-700/50">
+                          {item.assetId ? (
+                            <Box className="h-4 w-4 text-zinc-500" />
+                          ) : (
+                            <Package className="h-4 w-4 text-zinc-500" />
+                          )}
+                        </div>
+                      )}
+
+                      {/* Info */}
+                      <div className="min-w-0 flex-1">
+                        <p
+                          className={`truncate text-sm font-medium ${
+                            item.consumed ? "line-through" : ""
+                          }`}
+                        >
                           {item.productName}
                         </p>
+                        {item.assetBarcode && (
+                          <p className="font-mono text-[10px] text-zinc-500">
+                            {item.assetBarcode}
+                          </p>
+                        )}
+                        {item.consumed && (
+                          <Badge
+                            variant="outline"
+                            className="mt-1 border-amber-500/30 text-[10px] text-amber-400"
+                          >
+                            Consumed — won&apos;t return to inventory
+                          </Badge>
+                        )}
                       </div>
-                      {item.assetBarcode && (
-                        <p className="ml-5.5 font-mono text-[10px] text-zinc-500">
-                          {item.assetBarcode}
-                        </p>
-                      )}
-                    </div>
-                    {!item.assetId ? (
-                      <div className="flex items-center gap-1">
+
+                      {/* Controls */}
+                      {!item.assetId ? (
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => updateQuantity(index, -1)}
+                          >
+                            <Minus className="h-3 w-3" />
+                          </Button>
+                          <span className="w-6 text-center text-sm font-medium">
+                            {item.quantity}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => updateQuantity(index, 1)}
+                          >
+                            <Plus className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-zinc-500 hover:text-red-400"
+                            onClick={() => removeItem(index)}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ) : (
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-7 w-7"
-                          onClick={() => updateQuantity(index, -1)}
-                        >
-                          <Minus className="h-3 w-3" />
-                        </Button>
-                        <span className="w-6 text-center text-sm font-medium">
-                          {item.quantity}
-                        </span>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          onClick={() => updateQuantity(index, 1)}
-                        >
-                          <Plus className="h-3 w-3" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-zinc-500 hover:text-red-400"
+                          className="h-8 w-8 text-zinc-500 hover:text-red-400"
                           onClick={() => removeItem(index)}
                         >
                           <Trash2 className="h-3 w-3" />
                         </Button>
-                      </div>
-                    ) : (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-zinc-500 hover:text-red-400"
-                        onClick={() => removeItem(index)}
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    )}
-                  </div>
-                  {/* Condition selector for serialized */}
-                  {item.assetId && (
-                    <div className="mt-2 ml-5.5">
-                      <Select
-                        value={item.condition}
-                        onValueChange={(v) => updateCondition(index, v)}
-                      >
-                        <SelectTrigger className="h-7 w-32 border-zinc-700 bg-zinc-800 text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent className="border-zinc-700 bg-zinc-900">
-                          <SelectItem value="good">Good</SelectItem>
-                          <SelectItem value="fair">Fair</SelectItem>
-                          <SelectItem value="damaged">Damaged</SelectItem>
-                          <SelectItem value="lost">Lost</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      )}
                     </div>
-                  )}
-                </div>
-              ))}
+
+                    {/* Condition selector + consumed toggle */}
+                    <div className="mt-2 flex items-center gap-2 pl-12">
+                      {item.assetId && (
+                        <Select
+                          value={item.condition}
+                          onValueChange={(v) => updateCondition(index, v)}
+                        >
+                          <SelectTrigger className="h-7 w-28 border-zinc-700 bg-zinc-800 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="border-zinc-700 bg-zinc-900">
+                            <SelectItem value="good">Good</SelectItem>
+                            <SelectItem value="fair">Fair</SelectItem>
+                            <SelectItem value="damaged">Damaged</SelectItem>
+                            <SelectItem value="lost">Lost</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
+                      <Button
+                        variant={item.consumed ? "secondary" : "ghost"}
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => toggleConsumed(index)}
+                      >
+                        <Ban className="mr-1 h-3 w-3" />
+                        {item.consumed ? "Consumed" : "Mark consumed"}
+                      </Button>
+                    </div>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Confirm */}
-      <Button
-        className="w-full"
-        size="lg"
-        onClick={handleConfirm}
-        disabled={isPending || items.length === 0}
-      >
-        {isPending ? (
-          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-        ) : (
-          <Check className="mr-2 h-4 w-4" />
-        )}
-        Confirm Check-In ({items.length} item
-        {items.length !== 1 ? "s" : ""})
-      </Button>
+      {/* Sticky Confirm Button */}
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-zinc-800 bg-zinc-950/95 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 backdrop-blur-sm">
+        <div className="mx-auto max-w-lg">
+          <Button
+            className="w-full"
+            size="lg"
+            onClick={handleConfirm}
+            disabled={isPending || items.length === 0}
+          >
+            {isPending ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Check className="mr-2 h-4 w-4" />
+            )}
+            Confirm Check-In ({items.length} item
+            {items.length !== 1 ? "s" : ""})
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

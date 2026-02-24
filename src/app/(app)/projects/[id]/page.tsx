@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { getProject } from "@/lib/actions/projects";
 import { getProjectCheckedOutItems } from "@/lib/actions/transfers";
 import { DeleteProjectButton } from "@/components/delete-project-button";
+import { TransferList } from "@/components/transfer-list";
 
 const statusColors: Record<string, string> = {
   active: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
@@ -45,6 +46,26 @@ export default async function ProjectDetailPage({
   if (!project) {
     notFound();
   }
+
+  // Serialize dates for client component
+  const serializedTransfers = project.transfers.map((t) => ({
+    ...t,
+    createdAt: t.createdAt.toISOString(),
+    items: t.items.map((item) => ({
+      ...item,
+      product: {
+        id: item.product.id,
+        name: item.product.name,
+      },
+      asset: item.asset
+        ? {
+            id: item.asset.id,
+            barcode: item.asset.barcode,
+            serialNumber: item.asset.serialNumber,
+          }
+        : null,
+    })),
+  }));
 
   return (
     <div className="space-y-4">
@@ -175,56 +196,15 @@ export default async function ProjectDetailPage({
         </CardContent>
       </Card>
 
-      {/* Recent Transfers */}
+      {/* Transfer History (expandable) */}
       <Card className="border-zinc-800 bg-zinc-900">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Recent Transfers</CardTitle>
+          <CardTitle className="text-base">
+            Transfer History ({project.transfers.length})
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          {project.transfers.length === 0 ? (
-            <p className="py-4 text-center text-sm text-zinc-500">
-              No transfers yet.
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {project.transfers.map((transfer) => (
-                <div
-                  key={transfer.id}
-                  className="rounded-lg bg-zinc-800/50 px-3 py-2"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      {transfer.type === "checkout" ? (
-                        <LogOut className="h-3.5 w-3.5 text-amber-400" />
-                      ) : (
-                        <LogIn className="h-3.5 w-3.5 text-emerald-400" />
-                      )}
-                      <span className="text-sm font-medium capitalize">
-                        {transfer.type === "checkout"
-                          ? "Check Out"
-                          : "Check In"}
-                      </span>
-                    </div>
-                    <span className="text-xs text-zinc-500">
-                      {new Date(transfer.createdAt).toLocaleDateString()}
-                    </span>
-                  </div>
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {transfer.items.map((item) => (
-                      <Badge
-                        key={item.id}
-                        variant="secondary"
-                        className="text-[10px]"
-                      >
-                        {item.product.name}
-                        {item.quantity > 1 ? ` x${item.quantity}` : ""}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          <TransferList transfers={serializedTransfers} />
         </CardContent>
       </Card>
 

@@ -3,6 +3,7 @@
 import { useState, useTransition, useEffect, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import {
   ArrowLeft,
   ScanBarcode,
@@ -15,7 +16,9 @@ import {
   Package,
   Box,
   Check,
+  CheckCircle2,
 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -34,6 +37,7 @@ interface CheckoutItem {
   productId: string;
   productName: string;
   trackingType: string;
+  imageUrl?: string;
   assetId?: string;
   assetBarcode?: string;
   serialNumber?: string;
@@ -50,11 +54,14 @@ export default function CheckoutPage() {
   const [showScanner, setShowScanner] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<
-    { id: string; name: string; quantity: number; trackingType: string }[]
+    { id: string; name: string; quantity: number; trackingType: string; imageUrl: string | null }[]
   >([]);
   const [isPending, startTransition] = useTransition();
   const [isSearching, setIsSearching] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [confirmedCount, setConfirmedCount] = useState(0);
   const beepRef = useRef<AudioContext | null>(null);
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -95,13 +102,14 @@ export default function CheckoutPage() {
       try {
         const asset = await getAssetByBarcode(barcode);
         if (asset) {
-          // Check if already in list
           if (items.find((i) => i.assetId === asset.id)) {
             toast.error("Already in list");
             return;
           }
           if (asset.currentProjectId) {
-            toast.error(`Already checked out to ${asset.project?.name || "a project"}`);
+            toast.error(
+              `Already checked out to ${asset.project?.name || "a project"}`
+            );
             return;
           }
           setItems((prev) => [
@@ -110,6 +118,7 @@ export default function CheckoutPage() {
               productId: asset.productId,
               productName: asset.product.name,
               trackingType: "serialized",
+              imageUrl: asset.product.imageUrl || undefined,
               assetId: asset.id,
               assetBarcode: asset.barcode,
               serialNumber: asset.serialNumber || undefined,
@@ -149,6 +158,7 @@ export default function CheckoutPage() {
                 productId: product.id,
                 productName: product.name,
                 trackingType: "bulk",
+                imageUrl: product.imageUrl || undefined,
                 quantity: 1,
                 maxQuantity: product.quantity,
               },
@@ -166,29 +176,35 @@ export default function CheckoutPage() {
     [items]
   );
 
-  async function handleSearch(query: string) {
+  function handleSearch(query: string) {
     setSearchQuery(query);
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
     if (!query.trim()) {
       setSearchResults([]);
       return;
     }
-    setIsSearching(true);
-    try {
-      const results = await getProducts(query);
-      setSearchResults(
-        results
-          .filter((p) => p.trackingType === "bulk" && p.quantity > 0)
-          .map((p) => ({
-            id: p.id,
-            name: p.name,
-            quantity: p.quantity,
-            trackingType: p.trackingType,
-          }))
-      );
-    } catch {
-      setSearchResults([]);
-    }
-    setIsSearching(false);
+    searchTimeoutRef.current = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const results = await getProducts(query);
+        setSearchResults(
+          results
+            .filter((p) => p.trackingType === "bulk" && p.quantity > 0)
+            .map((p) => ({
+              id: p.id,
+              name: p.name,
+              quantity: p.quantity,
+              trackingType: p.trackingType,
+              imageUrl: p.imageUrl,
+            }))
+        );
+      } catch {
+        setSearchResults([]);
+      }
+      setIsSearching(false);
+    }, 300);
   }
 
   function addFromSearch(product: {
@@ -196,6 +212,7 @@ export default function CheckoutPage() {
     name: string;
     quantity: number;
     trackingType: string;
+    imageUrl: string | null;
   }) {
     const existing = items.find(
       (i) => i.productId === product.id && !i.assetId
@@ -215,6 +232,7 @@ export default function CheckoutPage() {
           productId: product.id,
           productName: product.name,
           trackingType: product.trackingType,
+          imageUrl: product.imageUrl || undefined,
           quantity: 1,
           maxQuantity: product.quantity,
         },
@@ -259,18 +277,57 @@ export default function CheckoutPage() {
             quantity: item.quantity,
           })),
         });
-        toast.success(
-          `Checked out ${items.length} item${items.length !== 1 ? "s" : ""} to ${projectName}`
-        );
-        router.push(`/projects/${projectId}`);
+        setConfirmedCount(items.length);
+        setShowSuccess(true);
       } catch {
         toast.error("Failed to check out items");
       }
     });
   }
 
+  // Success screen
+  if (showSuccess) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="flex min-h-[60vh] flex-col items-center justify-center gap-6 text-center"
+      >
+        <motion.div
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          transition={{ type: "spring", delay: 0.1, stiffness: 200 }}
+        >
+          <CheckCircle2 className="h-20 w-20 text-emerald-400" />
+        </motion.div>
+        <div>
+          <h2 className="text-2xl font-bold">Check-Out Complete</h2>
+          <p className="mt-1 text-zinc-400">
+            {confirmedCount} item{confirmedCount !== 1 ? "s" : ""} checked out
+            to <span className="text-zinc-200">{projectName}</span>
+          </p>
+        </div>
+        <div className="flex gap-3">
+          <Button variant="outline" asChild>
+            <Link href={`/projects/${projectId}`}>View Project</Link>
+          </Button>
+          <Button
+            onClick={() => {
+              setShowSuccess(false);
+              setItems([]);
+              setConfirmedCount(0);
+            }}
+          >
+            Check Out More
+          </Button>
+        </div>
+      </motion.div>
+    );
+  }
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pb-24">
+      {/* Header */}
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" asChild>
           <Link href={`/projects/${projectId}`}>
@@ -306,39 +363,61 @@ export default function CheckoutPage() {
       )}
 
       {/* Search */}
-      <div className="flex gap-2">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-          <Input
-            placeholder="Search bulk items..."
-            className="border-zinc-800 bg-zinc-900 pl-9"
-            value={searchQuery}
-            onChange={(e) => handleSearch(e.target.value)}
-          />
-        </div>
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+        <Input
+          placeholder="Search products by name..."
+          className="border-zinc-800 bg-zinc-900 pl-9"
+          value={searchQuery}
+          onChange={(e) => handleSearch(e.target.value)}
+        />
+        {isSearching && (
+          <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-zinc-500" />
+        )}
       </div>
 
-      {searchResults.length > 0 && (
-        <Card className="border-zinc-800 bg-zinc-900">
-          <CardContent className="p-2">
-            {searchResults.map((product) => (
-              <button
-                key={product.id}
-                className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left transition-colors hover:bg-zinc-800"
-                onClick={() => addFromSearch(product)}
-              >
-                <div>
-                  <p className="text-sm font-medium">{product.name}</p>
-                  <p className="text-xs text-zinc-500">
-                    {product.quantity} available
-                  </p>
-                </div>
-                <Plus className="h-4 w-4 text-zinc-400" />
-              </button>
-            ))}
-          </CardContent>
-        </Card>
-      )}
+      <AnimatePresence>
+        {searchResults.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+          >
+            <Card className="border-zinc-800 bg-zinc-900">
+              <CardContent className="p-2">
+                {searchResults.map((product) => (
+                  <button
+                    key={product.id}
+                    className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-zinc-800"
+                    onClick={() => addFromSearch(product)}
+                  >
+                    {product.imageUrl ? (
+                      <Image
+                        src={product.imageUrl}
+                        alt={product.name}
+                        width={32}
+                        height={32}
+                        className="h-8 w-8 rounded object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-8 w-8 items-center justify-center rounded bg-zinc-800">
+                        <Package className="h-4 w-4 text-zinc-500" />
+                      </div>
+                    )}
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">{product.name}</p>
+                      <p className="text-xs text-zinc-500">
+                        {product.quantity} available
+                      </p>
+                    </div>
+                    <Plus className="h-4 w-4 text-zinc-400" />
+                  </button>
+                ))}
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Items List */}
       <Card className="border-zinc-800 bg-zinc-900">
@@ -354,91 +433,116 @@ export default function CheckoutPage() {
             </p>
           ) : (
             <div className="space-y-2">
-              {items.map((item, index) => (
-                <div
-                  key={`${item.productId}-${item.assetId || index}`}
-                  className="flex items-center justify-between rounded-lg bg-zinc-800/50 px-3 py-2"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      {item.assetId ? (
-                        <Box className="h-3.5 w-3.5 text-zinc-400" />
-                      ) : (
-                        <Package className="h-3.5 w-3.5 text-zinc-400" />
-                      )}
+              <AnimatePresence initial={false}>
+                {items.map((item, index) => (
+                  <motion.div
+                    key={`${item.productId}-${item.assetId || "bulk"}`}
+                    initial={{ opacity: 0, x: -20, height: 0 }}
+                    animate={{ opacity: 1, x: 0, height: "auto" }}
+                    exit={{ opacity: 0, x: 20, height: 0 }}
+                    transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                    className="flex items-center gap-3 rounded-lg bg-zinc-800/50 px-3 py-2"
+                  >
+                    {/* Thumbnail */}
+                    {item.imageUrl ? (
+                      <Image
+                        src={item.imageUrl}
+                        alt={item.productName}
+                        width={36}
+                        height={36}
+                        className="h-9 w-9 flex-shrink-0 rounded object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded bg-zinc-700/50">
+                        {item.assetId ? (
+                          <Box className="h-4 w-4 text-zinc-500" />
+                        ) : (
+                          <Package className="h-4 w-4 text-zinc-500" />
+                        )}
+                      </div>
+                    )}
+
+                    {/* Info */}
+                    <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">
                         {item.productName}
                       </p>
+                      {item.assetBarcode && (
+                        <p className="font-mono text-[10px] text-zinc-500">
+                          {item.assetBarcode}
+                          {item.serialNumber && ` · ${item.serialNumber}`}
+                        </p>
+                      )}
                     </div>
-                    {item.assetBarcode && (
-                      <p className="ml-5.5 font-mono text-[10px] text-zinc-500">
-                        {item.assetBarcode}
-                        {item.serialNumber && ` · ${item.serialNumber}`}
-                      </p>
-                    )}
-                  </div>
-                  {!item.assetId ? (
-                    <div className="flex items-center gap-1">
+
+                    {/* Controls */}
+                    {!item.assetId ? (
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => updateQuantity(index, -1)}
+                        >
+                          <Minus className="h-3 w-3" />
+                        </Button>
+                        <span className="w-6 text-center text-sm font-medium">
+                          {item.quantity}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => updateQuantity(index, 1)}
+                        >
+                          <Plus className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-zinc-500 hover:text-red-400"
+                          onClick={() => removeItem(index)}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ) : (
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7"
-                        onClick={() => updateQuantity(index, -1)}
-                      >
-                        <Minus className="h-3 w-3" />
-                      </Button>
-                      <span className="w-6 text-center text-sm font-medium">
-                        {item.quantity}
-                      </span>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7"
-                        onClick={() => updateQuantity(index, 1)}
-                      >
-                        <Plus className="h-3 w-3" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-zinc-500 hover:text-red-400"
+                        className="h-8 w-8 text-zinc-500 hover:text-red-400"
                         onClick={() => removeItem(index)}
                       >
                         <Trash2 className="h-3 w-3" />
                       </Button>
-                    </div>
-                  ) : (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 text-zinc-500 hover:text-red-400"
-                      onClick={() => removeItem(index)}
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  )}
-                </div>
-              ))}
+                    )}
+                  </motion.div>
+                ))}
+              </AnimatePresence>
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Confirm */}
-      <Button
-        className="w-full"
-        size="lg"
-        onClick={handleConfirm}
-        disabled={isPending || items.length === 0}
-      >
-        {isPending ? (
-          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-        ) : (
-          <Check className="mr-2 h-4 w-4" />
-        )}
-        Confirm Check-Out ({items.length} item
-        {items.length !== 1 ? "s" : ""})
-      </Button>
+      {/* Sticky Confirm Button */}
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-zinc-800 bg-zinc-950/95 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 backdrop-blur-sm">
+        <div className="mx-auto max-w-lg">
+          <Button
+            className="w-full"
+            size="lg"
+            onClick={handleConfirm}
+            disabled={isPending || items.length === 0}
+          >
+            {isPending ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Check className="mr-2 h-4 w-4" />
+            )}
+            Confirm Check-Out ({items.length} item
+            {items.length !== 1 ? "s" : ""})
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
