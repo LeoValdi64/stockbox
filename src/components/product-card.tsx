@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { Minus, Plus, Package } from "lucide-react";
+import { Minus, Plus, Package, Box } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,13 +18,17 @@ interface ProductCardProps {
     salePrice: number | null;
     barcode: string | null;
     imageUrl: string | null;
+    trackingType: string;
   };
+  assetCount?: number;
 }
 
-export function ProductCard({ product }: ProductCardProps) {
+export function ProductCard({ product, assetCount }: ProductCardProps) {
+  const isSerialized = product.trackingType === "serialized";
   const [qty, setQty] = useState(product.quantity);
   const [isPending, startTransition] = useTransition();
-  const isLowStock = product.minStock !== null && qty <= product.minStock;
+  const isLowStock =
+    !isSerialized && product.minStock !== null && qty <= product.minStock;
 
   function handleAdjust(delta: number) {
     const newQty = Math.max(0, qty + delta);
@@ -82,37 +86,58 @@ export function ProductCard({ product }: ProductCardProps) {
                 {product.category}
               </Badge>
             )}
+            {isSerialized && (
+              <Badge
+                variant="outline"
+                className="text-[10px] px-1.5 py-0 gap-0.5"
+              >
+                <Box className="h-2.5 w-2.5" />
+                Serial
+              </Badge>
+            )}
           </div>
         </Link>
 
         {/* Quantity controls */}
-        <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-zinc-400 hover:text-white"
-            onClick={() => handleAdjust(-1)}
-            disabled={isPending || qty <= 0}
+        {isSerialized ? (
+          <Link
+            href={`/inventory/${product.id}/assets`}
+            className="text-center"
           >
-            <Minus className="h-3.5 w-3.5" />
-          </Button>
-          <span
-            className={`min-w-[2rem] text-center text-sm font-semibold ${
-              isLowStock ? "text-red-400" : ""
-            }`}
-          >
-            {qty}
-          </span>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-zinc-400 hover:text-white"
-            onClick={() => handleAdjust(1)}
-            disabled={isPending}
-          >
-            <Plus className="h-3.5 w-3.5" />
-          </Button>
-        </div>
+            <span className="text-sm font-semibold">
+              {assetCount ?? 0}
+            </span>
+            <p className="text-[10px] text-zinc-500">units</p>
+          </Link>
+        ) : (
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-zinc-400 hover:text-white"
+              onClick={() => handleAdjust(-1)}
+              disabled={isPending || qty <= 0}
+            >
+              <Minus className="h-3.5 w-3.5" />
+            </Button>
+            <span
+              className={`min-w-[2rem] text-center text-sm font-semibold ${
+                isLowStock ? "text-red-400" : ""
+              }`}
+            >
+              {qty}
+            </span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-zinc-400 hover:text-white"
+              onClick={() => handleAdjust(1)}
+              disabled={isPending}
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        )}
       </div>
     </Card>
   );

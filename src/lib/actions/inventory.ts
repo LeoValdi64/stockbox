@@ -61,6 +61,7 @@ export async function createProduct(data: {
   costPrice?: number;
   salePrice?: number;
   imageUrl?: string;
+  trackingType?: string;
 }) {
   const userId = await getUserId();
 
@@ -76,6 +77,7 @@ export async function createProduct(data: {
       costPrice: data.costPrice ?? null,
       salePrice: data.salePrice ?? null,
       imageUrl: data.imageUrl || null,
+      trackingType: data.trackingType || "bulk",
     },
   });
 
@@ -96,6 +98,7 @@ export async function updateProduct(
     costPrice?: number;
     salePrice?: number;
     imageUrl?: string;
+    trackingType?: string;
   }
 ) {
   const userId = await getUserId();
@@ -167,7 +170,7 @@ export async function deleteProduct(id: string) {
 export async function getDashboardStats() {
   const userId = await getUserId();
 
-  const [products, lowStockProducts, recentSales] = await Promise.all([
+  const [products, lowStockProducts, recentSales, activeProjects, checkedOutAssets, recentTransfers] = await Promise.all([
     db.product.findMany({ where: { userId } }),
     db.product.findMany({
       where: {
@@ -183,6 +186,17 @@ export async function getDashboardStats() {
         items: {
           include: { product: true },
         },
+      },
+    }),
+    db.project.count({ where: { userId, status: "active" } }),
+    db.asset.count({ where: { userId, currentProjectId: { not: null } } }),
+    db.transfer.findMany({
+      where: { userId },
+      orderBy: { createdAt: "desc" },
+      take: 5,
+      include: {
+        project: { select: { name: true } },
+        items: { include: { product: { select: { name: true } } } },
       },
     }),
   ]);
@@ -218,5 +232,8 @@ export async function getDashboardStats() {
     recentSales,
     todayRevenue,
     weekRevenue,
+    activeProjects,
+    checkedOutAssets,
+    recentTransfers,
   };
 }

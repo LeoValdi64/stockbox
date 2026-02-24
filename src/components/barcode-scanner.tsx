@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 interface BarcodeScannerProps {
   onScan: (barcode: string) => void;
   onClose?: () => void;
+  continuous?: boolean;
 }
 
 const BARCODE_FORMATS = [
@@ -22,7 +23,7 @@ const BARCODE_FORMATS = [
   "qr_code",
 ] as const;
 
-export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
+export function BarcodeScanner({ onScan, onClose, continuous }: BarcodeScannerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const onScanRef = useRef(onScan);
   const lastScannedRef = useRef<string | null>(null);

@@ -4,6 +4,10 @@ import {
   AlertTriangle,
   TrendingUp,
   ShoppingCart,
+  FolderKanban,
+  LogOut,
+  LogIn,
+  ArrowLeftRight,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -66,14 +70,12 @@ export default async function DashboardPage() {
         <Card className="border-zinc-800 bg-zinc-900">
           <CardContent className="pt-4 pb-4">
             <div className="flex items-center gap-2 text-zinc-400">
-              <TrendingUp className="h-4 w-4" />
-              <span className="text-xs">Today</span>
+              <FolderKanban className="h-4 w-4" />
+              <span className="text-xs">Active Projects</span>
             </div>
-            <p className="mt-1 text-2xl font-bold">
-              ${stats.todayRevenue.toFixed(2)}
-            </p>
+            <p className="mt-1 text-2xl font-bold">{stats.activeProjects}</p>
             <p className="text-xs text-zinc-500">
-              ${stats.weekRevenue.toFixed(2)} this week
+              {stats.checkedOutAssets} assets out
             </p>
           </CardContent>
         </Card>
@@ -100,6 +102,30 @@ export default async function DashboardPage() {
         </Card>
       </div>
 
+      {/* Revenue */}
+      <Card className="border-zinc-800 bg-zinc-900">
+        <CardContent className="pt-4 pb-4">
+          <div className="flex items-center gap-2 text-zinc-400">
+            <TrendingUp className="h-4 w-4" />
+            <span className="text-xs">Revenue</span>
+          </div>
+          <div className="mt-1 flex items-baseline gap-4">
+            <div>
+              <p className="text-2xl font-bold">
+                ${stats.todayRevenue.toFixed(2)}
+              </p>
+              <p className="text-xs text-zinc-500">today</p>
+            </div>
+            <div>
+              <p className="text-lg font-medium text-zinc-400">
+                ${stats.weekRevenue.toFixed(2)}
+              </p>
+              <p className="text-xs text-zinc-500">this week</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Low Stock Alerts */}
       {stats.lowStock.length > 0 && (
         <Card className="border-red-900/50 bg-zinc-900">
@@ -120,6 +146,46 @@ export default async function DashboardPage() {
                 <Badge variant="destructive" className="text-xs">
                   {product.quantity} / {product.minStock}
                 </Badge>
+              </Link>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Recent Transfers */}
+      {stats.recentTransfers.length > 0 && (
+        <Card className="border-zinc-800 bg-zinc-900">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <ArrowLeftRight className="h-4 w-4" />
+              Recent Transfers
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {stats.recentTransfers.map((transfer) => (
+              <Link
+                key={transfer.id}
+                href={`/projects/${transfer.projectId}`}
+                className="flex items-center justify-between rounded-lg bg-zinc-800/50 px-3 py-2 transition-colors hover:bg-zinc-800"
+              >
+                <div className="flex items-center gap-2">
+                  {transfer.type === "checkout" ? (
+                    <LogOut className="h-3.5 w-3.5 text-amber-400" />
+                  ) : (
+                    <LogIn className="h-3.5 w-3.5 text-emerald-400" />
+                  )}
+                  <div>
+                    <p className="text-sm">
+                      {transfer.type === "checkout" ? "Check Out" : "Check In"}{" "}
+                      &middot; {transfer.project.name}
+                    </p>
+                    <p className="text-xs text-zinc-500">
+                      {transfer.items.length} item
+                      {transfer.items.length !== 1 ? "s" : ""} &middot;{" "}
+                      {new Date(transfer.createdAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                </div>
               </Link>
             ))}
           </CardContent>

@@ -17,25 +17,31 @@ model User {
   products   Product[]
   sales      Sale[]
   categories Category[]
+  projects   Project[]
+  assets     Asset[]
+  transfers  Transfer[]
 }
 
 model Product {
-  id          String   @id @default(cuid())
-  userId      String
-  name        String
-  description String?
-  barcode     String?
-  quantity    Int      @default(0)
-  minStock    Int?
-  category    String?
-  imageUrl    String?
-  costPrice   Float?
-  salePrice   Float?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String   @id @default(cuid())
+  userId       String
+  name         String
+  description  String?
+  barcode      String?
+  quantity     Int      @default(0)
+  minStock     Int?
+  category     String?
+  imageUrl     String?
+  costPrice    Float?
+  salePrice    Float?
+  trackingType String   @default("bulk") // "bulk" or "serialized"
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  saleItems SaleItem[]
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  saleItems     SaleItem[]
+  assets        Asset[]
+  transferItems TransferItem[]
 
   @@unique([userId, barcode])
   @@index([userId])
@@ -78,4 +84,75 @@ model Category {
 
   @@unique([userId, name])
   @@index([userId])
+}
+
+model Asset {
+  id               String   @id @default(cuid())
+  productId        String
+  userId           String
+  serialNumber     String?
+  barcode          String
+  condition        String   @default("good") // good, fair, damaged, lost
+  notes            String?
+  currentProjectId String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  product       Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project       Project?       @relation(fields: [currentProjectId], references: [id], onDelete: SetNull)
+  transferItems TransferItem[]
+
+  @@unique([userId, barcode])
+  @@index([userId])
+  @@index([productId])
+  @@index([currentProjectId])
+}
+
+model Project {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  location  String?
+  status    String   @default("active") // active, completed, archived
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assets    Asset[]
+  transfers Transfer[]
+
+  @@index([userId])
+}
+
+model Transfer {
+  id        String   @id @default(cuid())
+  userId    String
+  projectId String
+  type      String   // "checkout" or "checkin"
+  notes     String?
+  createdAt DateTime @default(now())
+
+  user    User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  items   TransferItem[]
+
+  @@index([userId])
+  @@index([projectId])
+}
+
+model TransferItem {
+  id         String  @id @default(cuid())
+  transferId String
+  productId  String
+  assetId    String?
+  quantity   Int     @default(1)
+  condition  String?
+
+  transfer Transfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  asset    Asset?   @relation(fields: [assetId], references: [id], onDelete: SetNull)
+
+  @@index([transferId])
 }

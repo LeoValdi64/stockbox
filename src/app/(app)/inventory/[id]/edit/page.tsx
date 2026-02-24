@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ProductForm } from "@/components/product-form";
 import { getProduct } from "@/lib/actions/inventory";
+import { db } from "@/lib/db";
 
 export default async function EditProductPage({
   params,
@@ -23,6 +24,13 @@ export default async function EditProductPage({
     notFound();
   }
 
+  let assetCount = 0;
+  if (product.trackingType === "serialized") {
+    assetCount = await db.asset.count({
+      where: { productId: product.id },
+    });
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
@@ -34,7 +42,7 @@ export default async function EditProductPage({
         <h1 className="text-2xl font-bold">Edit Product</h1>
       </div>
 
-      <ProductForm product={product} />
+      <ProductForm product={product} assetCount={assetCount} />
     </div>
   );
 }

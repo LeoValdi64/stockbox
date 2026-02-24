@@ -1,12 +1,13 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Edit, Package } from "lucide-react";
+import { ArrowLeft, Edit, Package, Box, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { getProduct } from "@/lib/actions/inventory";
 import { DeleteProductButton } from "@/components/delete-product-button";
 import { BarcodePrintView } from "@/components/barcode-print-view";
+import { db } from "@/lib/db";
 
 export default async function ProductDetailPage({
   params,
@@ -26,8 +27,23 @@ export default async function ProductDetailPage({
     notFound();
   }
 
+  const isSerialized = product.trackingType === "serialized";
+  let assetCount = 0;
+  let checkedOutCount = 0;
+
+  if (isSerialized) {
+    [assetCount, checkedOutCount] = await Promise.all([
+      db.asset.count({ where: { productId: product.id } }),
+      db.asset.count({
+        where: { productId: product.id, currentProjectId: { not: null } },
+      }),
+    ]);
+  }
+
   const isLowStock =
-    product.minStock !== null && product.quantity <= product.minStock;
+    !isSerialized &&
+    product.minStock !== null &&
+    product.quantity <= product.minStock;
 
   return (
     <div className="space-y-4">
@@ -67,26 +83,71 @@ export default async function ProductDetailPage({
 
       <Card className="border-zinc-800 bg-zinc-900">
         <CardContent className="space-y-4 pt-6">
+          {/* Tracking Type Badge */}
           <div className="flex items-center justify-between">
-            <span className="text-sm text-zinc-400">Quantity</span>
-            <span
-              className={`text-lg font-bold ${
-                isLowStock ? "text-red-400" : ""
-              }`}
-            >
-              {product.quantity}
-              {product.minStock !== null && (
-                <span className="ml-1 text-sm text-zinc-500">
-                  / min {product.minStock}
-                </span>
+            <span className="text-sm text-zinc-400">Tracking</span>
+            <Badge variant="secondary" className="gap-1">
+              {isSerialized ? (
+                <>
+                  <Box className="h-3 w-3" /> Serialized
+                </>
+              ) : (
+                <>
+                  <Layers className="h-3 w-3" /> Bulk
+                </>
               )}
-            </span>
+            </Badge>
           </div>
 
-          {isLowStock && (
-            <Badge variant="destructive" className="w-full justify-center">
-              Low Stock Alert
-            </Badge>
+          {/* Quantity / Asset Count */}
+          {isSerialized ? (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-zinc-400">Total Units</span>
+                <span className="text-lg font-bold">{assetCount}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-zinc-400">Checked Out</span>
+                <span className="text-lg font-bold text-amber-400">
+                  {checkedOutCount}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-zinc-400">In Warehouse</span>
+                <span className="text-lg font-bold text-emerald-400">
+                  {assetCount - checkedOutCount}
+                </span>
+              </div>
+              <Button variant="outline" className="w-full" asChild>
+                <Link href={`/inventory/${product.id}/assets`}>
+                  Manage Units
+                </Link>
+              </Button>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-zinc-400">Quantity</span>
+                <span
+                  className={`text-lg font-bold ${
+                    isLowStock ? "text-red-400" : ""
+                  }`}
+                >
+                  {product.quantity}
+                  {product.minStock !== null && (
+                    <span className="ml-1 text-sm text-zinc-500">
+                      / min {product.minStock}
+                    </span>
+                  )}
+                </span>
+              </div>
+
+              {isLowStock && (
+                <Badge variant="destructive" className="w-full justify-center">
+                  Low Stock Alert
+                </Badge>
+              )}
+            </>
           )}
 
           {product.description && (
